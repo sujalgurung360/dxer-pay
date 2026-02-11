@@ -1,0 +1,378 @@
+// ============================================================
+// DXER Prisma Schema
+// ============================================================
+// Aligned with Supabase migrations. Uses db-level defaults.
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model profiles {
+  id                  String   @id @default(uuid()) @db.Uuid
+  user_id             String   @unique @db.Uuid
+  full_name           String
+  email               String
+  avatar_url          String?
+  phone_number        String?
+  verification_status String   @default("pending") // pending, verified, rejected
+  verification_method String?  // manual, sheerid
+  document_url        String?  // uploaded ID/document path
+  created_at          DateTime @default(now()) @db.Timestamptz()
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz()
+}
+
+model organizations {
+  id                      String   @id @default(uuid()) @db.Uuid
+  name                    String
+  slug                    String   @unique
+  owner_id                String   @db.Uuid
+  registration_number     String?  // Business registration / tax ID
+  business_type           String?  // LLC, Corporation, Sole Proprietor, etc.
+  country                 String?
+  wallet_address          String?  // Polygon public address (auto-generated)
+  wallet_private_key_enc  String?  // Encrypted private key (never exposed to client)
+  metamask_address        String?  // User-connected MetaMask address (optional)
+  created_at              DateTime @default(now()) @db.Timestamptz()
+  updated_at              DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  members             organization_members[]
+  customers           customers[]
+  employees           employees[]
+  expenses            expenses[]
+  invoices            invoices[]
+  payrolls            payrolls[]
+  production_batches  production_batches[]
+  production_events   production_events[]
+  device_identities   device_identities[]
+  content_addresses   content_addresses[]
+  audit_log           audit_log[]
+  dxer_anchor_jobs    dxer_anchor_jobs[]
+  dxer_sequences      dxer_sequences[]
+}
+
+model organization_members {
+  id                  String   @id @default(uuid()) @db.Uuid
+  org_id              String   @db.Uuid
+  user_id             String   @db.Uuid
+  role                String
+  multichain_data_hex String?
+  multichain_txid     String?
+  polygon_txhash      String?
+  created_at          DateTime @default(now()) @db.Timestamptz()
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  organization organizations @relation(fields: [org_id], references: [id], onDelete: Cascade)
+
+  @@unique([org_id, user_id])
+  @@index([org_id])
+  @@index([user_id])
+}
+
+model customers {
+  id                  String   @id @default(uuid()) @db.Uuid
+  org_id              String   @db.Uuid
+  name                String
+  email               String?
+  phone               String?
+  address             String?
+  tax_id              String?
+  multichain_data_hex String?
+  multichain_txid     String?
+  polygon_txhash      String?
+  created_at          DateTime @default(now()) @db.Timestamptz()
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  organization organizations @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  invoices     invoices[]
+
+  @@index([org_id])
+}
+
+model employees {
+  id                     String    @id @default(uuid()) @db.Uuid
+  org_id                 String    @db.Uuid
+  user_id                String?   @unique @db.Uuid
+  full_name              String
+  email                  String
+  position               String?
+  department             String?
+  salary                 Decimal   @db.Decimal(15, 2)
+  currency               String    @default("USD")
+  start_date             DateTime  @db.Date
+  is_active              Boolean   @default(true)
+  wallet_address         String?
+  wallet_private_key_enc String?
+  onboarding_status      String    @default("draft")  // draft | invited | registered | verified | contract_signed | completed
+  invite_token           String?   @unique
+  invite_expires_at      DateTime? @db.Timestamptz()
+  contract_signed_at     DateTime? @db.Timestamptz()
+  multichain_data_hex    String?
+  multichain_txid        String?
+  polygon_txhash         String?
+  created_at             DateTime  @default(now()) @db.Timestamptz()
+  updated_at             DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  organization    organizations    @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  payroll_entries payroll_entries[]
+
+  @@index([org_id])
+}
+
+model production_batches {
+  id                  String    @id @default(uuid()) @db.Uuid
+  org_id              String    @db.Uuid
+  created_by          String    @db.Uuid
+  name                String
+  description         String?
+  status              String    @default("planned")
+  planned_start_date  DateTime? @db.Date
+  planned_end_date    DateTime? @db.Date
+  actual_start_date   DateTime? @db.Date
+  actual_end_date     DateTime? @db.Date
+  multichain_data_hex String?
+  multichain_txid     String?
+  polygon_txhash      String?
+  created_at          DateTime  @default(now()) @db.Timestamptz()
+  updated_at          DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  organization organizations      @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  events       production_events[]
+  expenses     expenses[]
+
+  @@index([org_id])
+}
+
+model production_events {
+  id                  String   @id @default(uuid()) @db.Uuid
+  org_id              String   @db.Uuid
+  batch_id            String   @db.Uuid
+  created_by          String   @db.Uuid
+  event_type          String
+  description         String?
+  metadata            Json?
+  multichain_data_hex String?
+  multichain_txid     String?
+  polygon_txhash      String?
+  created_at          DateTime @default(now()) @db.Timestamptz()
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  organization organizations      @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  batch        production_batches @relation(fields: [batch_id], references: [id], onDelete: Cascade)
+
+  @@index([batch_id])
+  @@index([org_id])
+}
+
+model expenses {
+  id                  String    @id @default(uuid()) @db.Uuid
+  org_id              String    @db.Uuid
+  created_by          String    @db.Uuid
+  description         String
+  amount              Decimal   @db.Decimal(15, 2)
+  currency            String    @default("USD")
+  category            String
+  status              String    @default("pending")
+  date                DateTime  @db.Date
+  tags                String[]  @default([])
+  notes               String?
+  receipt_url         String?
+  production_batch_id String?   @db.Uuid
+  multichain_data_hex String?
+  multichain_txid     String?
+  polygon_txhash      String?
+  created_at          DateTime  @default(now()) @db.Timestamptz()
+  updated_at          DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  organization     organizations       @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  production_batch production_batches? @relation(fields: [production_batch_id], references: [id])
+
+  @@index([org_id])
+  @@index([org_id, date])
+  @@index([org_id, status])
+}
+
+model invoices {
+  id                  String   @id @default(uuid()) @db.Uuid
+  org_id              String   @db.Uuid
+  created_by          String   @db.Uuid
+  customer_id         String   @db.Uuid
+  invoice_number      String
+  status              String   @default("draft")
+  due_date            DateTime @db.Date
+  currency            String   @default("USD")
+  subtotal            Decimal  @default(0) @db.Decimal(15, 2)
+  tax_rate            Decimal  @default(0) @db.Decimal(5, 2)
+  tax_amount          Decimal  @default(0) @db.Decimal(15, 2)
+  total               Decimal  @default(0) @db.Decimal(15, 2)
+  notes               String?
+  multichain_data_hex String?
+  multichain_txid     String?
+  polygon_txhash      String?
+  created_at          DateTime @default(now()) @db.Timestamptz()
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  organization organizations        @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  customer     customers            @relation(fields: [customer_id], references: [id])
+  line_items   invoice_line_items[]
+
+  @@unique([org_id, invoice_number])
+  @@index([org_id])
+  @@index([customer_id])
+  @@index([org_id, status])
+}
+
+model invoice_line_items {
+  id          String   @id @default(uuid()) @db.Uuid
+  invoice_id  String   @db.Uuid
+  description String
+  quantity    Decimal  @db.Decimal(15, 4)
+  unit_price  Decimal  @db.Decimal(15, 2)
+  amount      Decimal  @db.Decimal(15, 2)
+  created_at  DateTime @default(now()) @db.Timestamptz()
+
+  invoice invoices @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+
+  @@index([invoice_id])
+}
+
+model payrolls {
+  id                  String   @id @default(uuid()) @db.Uuid
+  org_id              String   @db.Uuid
+  created_by          String   @db.Uuid
+  period_start        DateTime @db.Date
+  period_end          DateTime @db.Date
+  pay_date            DateTime @db.Date
+  status              String   @default("draft")
+  total_amount        Decimal  @default(0) @db.Decimal(15, 2)
+  currency            String   @default("USD")
+  notes               String?
+  multichain_data_hex String?
+  multichain_txid     String?
+  polygon_txhash      String?
+  created_at          DateTime @default(now()) @db.Timestamptz()
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  organization organizations    @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  entries      payroll_entries[]
+
+  @@index([org_id])
+}
+
+model payroll_entries {
+  id                  String   @id @default(uuid()) @db.Uuid
+  payroll_id          String   @db.Uuid
+  employee_id         String   @db.Uuid
+  amount              Decimal  @db.Decimal(15, 2)
+  multichain_data_hex String?
+  multichain_txid     String?
+  polygon_txhash      String?
+  created_at          DateTime @default(now()) @db.Timestamptz()
+
+  payroll  payrolls  @relation(fields: [payroll_id], references: [id], onDelete: Cascade)
+  employee employees @relation(fields: [employee_id], references: [id])
+
+  @@index([payroll_id])
+}
+
+model device_identities {
+  id           String    @id @default(uuid()) @db.Uuid
+  org_id       String    @db.Uuid
+  device_name  String
+  public_key   String
+  is_active    Boolean   @default(true)
+  last_seen_at DateTime? @db.Timestamptz()
+  created_at   DateTime  @default(now()) @db.Timestamptz()
+  updated_at   DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  organization organizations @relation(fields: [org_id], references: [id], onDelete: Cascade)
+
+  @@index([org_id])
+}
+
+model content_addresses {
+  id             String   @id @default(uuid()) @db.Uuid
+  org_id         String   @db.Uuid
+  entity_type    String
+  entity_id      String   @db.Uuid
+  hash_algorithm String   @default("sha256")
+  hash_value     String
+  created_at     DateTime @default(now()) @db.Timestamptz()
+  updated_at     DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  organization organizations @relation(fields: [org_id], references: [id], onDelete: Cascade)
+
+  @@index([entity_type, entity_id])
+  @@index([org_id])
+}
+
+model audit_log {
+  id                  String   @id @default(uuid()) @db.Uuid
+  org_id              String   @db.Uuid
+  user_id             String   @db.Uuid
+  action              String
+  entity_type         String
+  entity_id           String   @db.Uuid
+  version             Int      @default(1)              // Version chain: v1 → v2 → v3
+  previous_hash       String?                            // SHA-256 hash of the previous version
+  previous_polygon_tx String?                            // Polygon TX hash of previous version
+  changed_fields      String[] @default([])              // List of fields that changed in this version
+  before_data         Json?
+  after_data          Json?
+  ip_address          String?
+  user_agent          String?
+  multichain_data_hex String?
+  multichain_txid     String?
+  polygon_txhash      String?
+  created_at          DateTime @default(now()) @db.Timestamptz()
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  organization organizations @relation(fields: [org_id], references: [id], onDelete: Cascade)
+
+  @@index([org_id])
+  @@index([entity_type, entity_id])
+  @@index([user_id])
+  @@index([org_id, created_at(sort: Desc)])
+}
+
+model dxer_system_config {
+  id         String   @id @default(uuid()) @db.Uuid
+  key        String   @unique
+  value      Json     @default("{}")
+  created_at DateTime @default(now()) @db.Timestamptz()
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz()
+}
+
+model dxer_anchor_jobs {
+  id          String   @id @default(uuid()) @db.Uuid
+  org_id      String   @db.Uuid
+  entity_type String
+  entity_id   String   @db.Uuid
+  status      String   @default("pending")
+  payload     Json?
+  result      Json?
+  error       String?
+  created_at  DateTime @default(now()) @db.Timestamptz()
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  organization organizations @relation(fields: [org_id], references: [id], onDelete: Cascade)
+
+  @@index([org_id])
+  @@index([status])
+}
+
+model dxer_sequences {
+  id          String @id @default(uuid()) @db.Uuid
+  org_id      String @db.Uuid
+  seq_name    String
+  current_val BigInt @default(0)
+
+  organization organizations @relation(fields: [org_id], references: [id], onDelete: Cascade)
+
+  @@unique([org_id, seq_name])
+}
