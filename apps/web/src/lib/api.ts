@@ -219,4 +219,46 @@ export const api = {
     generateWallet: (employeeId: string) =>
       apiFetch(`/api/hiring/${employeeId}/generate-wallet`, { method: 'POST' }),
   },
+  accountancy: {
+    trialBalance: (params: { from: string; to: string; basis?: 'accrual' | 'cash' }) => {
+      const search = new URLSearchParams({
+        from: params.from,
+        to: params.to,
+        basis: params.basis || 'accrual',
+      }).toString();
+      return apiFetch('/api/accountancy/trial-balance?' + search);
+    },
+    profitAndLoss: (params: { from: string; to: string; basis?: 'accrual' | 'cash' }) => {
+      const search = new URLSearchParams({
+        from: params.from,
+        to: params.to,
+        basis: params.basis || 'accrual',
+      }).toString();
+      return apiFetch('/api/accountancy/profit-and-loss?' + search);
+    },
+    generalLedger: (params: { from: string; to: string; basis?: 'accrual' | 'cash'; accountCode?: string }) => {
+      const search = new URLSearchParams({
+        from: params.from,
+        to: params.to,
+        basis: params.basis || 'accrual',
+        ...(params.accountCode ? { accountCode: params.accountCode } : {}),
+      }).toString();
+      return apiFetch('/api/accountancy/general-ledger?' + search);
+    },
+    arAging: (asOf: string) => {
+      const search = new URLSearchParams({ asOf }).toString();
+      return apiFetch('/api/accountancy/ar-aging?' + search);
+    },
+    apAging: (asOf: string) => {
+      const search = new URLSearchParams({ asOf }).toString();
+      return apiFetch('/api/accountancy/ap-aging?' + search);
+    },
+    burnRate: (params: { from: string; to: string }) => {
+      const search = new URLSearchParams({
+        from: params.from,
+        to: params.to,
+      }).toString();
+      return apiFetch('/api/accountancy/burn-rate?' + search);
+    },
+  },
 };

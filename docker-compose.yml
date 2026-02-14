@@ -3,10 +3,9 @@
 # ============================================================
 # Usage: docker compose up -d
 # This sets up Supabase locally (Postgres, Auth, Storage, Studio)
+# and Multichain (private blockchain for anchoring).
 # Then run: npm run dev (for API + Web)
 # ============================================================
-
-version: "3.8"
 
 services:
   # ─── Supabase Postgres ───────────────────────────
@@ -128,5 +127,21 @@ services:
       PG_META_DB_USER: supabase_admin
       PG_META_DB_PASSWORD: postgres
 
+  # ─── Multichain (private blockchain for anchoring) ───────
+  multichain:
+    build: ./multichain
+    container_name: dxer-multichain
+    ports:
+      - "4798:4798"
+    environment:
+      MULTICHAIN_CHAIN_NAME: dxerchain
+      MULTICHAIN_RPC_PORT: "4798"
+      MULTICHAIN_RPC_USER: multichainrpc
+      MULTICHAIN_RPC_PASSWORD: dxer123
+      MULTICHAIN_RPC_ALLOW_IP: 0.0.0.0/0.0.0.0
+    volumes:
+      - dxer-multichain-data:/root/.multichain
+
 volumes:
   dxer-db-data:
+  dxer-multichain-data:

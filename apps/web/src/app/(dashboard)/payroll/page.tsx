@@ -17,6 +17,8 @@ export default function PayrollPage() {
   const [pagination, setPagination] = useState<any>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [formData, setFormData] = useState({
     periodStart: '', periodEnd: '', payDate: '', notes: '',
@@ -28,7 +30,10 @@ export default function PayrollPage() {
     if (!currentOrg) return;
     setLoading(true);
     try {
-      const res = await api.payrolls.list({ page: String(page) });
+      const params: Record<string, string> = { page: String(page) };
+      if (fromDate) params.dateFrom = fromDate;
+      if (toDate) params.dateTo = toDate;
+      const res = await api.payrolls.list(params);
       setData(res.data);
       setPagination(res.pagination);
     } catch (err) { console.error(err); }
@@ -89,6 +94,27 @@ export default function PayrollPage() {
           <button onClick={() => setShowCreate(true)} className="btn-primary"><Plus className="mr-2 h-4 w-4" />Generate Payroll</button>
         }
       />
+
+      <div className="mb-4 flex flex-wrap items-end gap-3 rounded-2xl border border-gray-100 bg-surface-50 px-4 py-3">
+        <div>
+          <label className="label mb-1">From</label>
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(e) => { setFromDate(e.target.value); setPage(1); }}
+            className="input-field"
+          />
+        </div>
+        <div>
+          <label className="label mb-1">To</label>
+          <input
+            type="date"
+            value={toDate}
+            onChange={(e) => { setToDate(e.target.value); setPage(1); }}
+            className="input-field"
+          />
+        </div>
+      </div>
 
       <DataTable
         columns={columns}

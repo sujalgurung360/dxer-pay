@@ -11,6 +11,31 @@ import { formatCurrency, formatDate, EXPENSE_CATEGORIES } from '@dxer/shared';
 import { Plus, Download, Ban, Eye } from 'lucide-react';
 import { AnchorBadge, AnchorDetail } from '@/components/ui/anchor-badge';
 
+const ACCOUNT_OPTIONS = [
+  { code: '', name: 'Auto (based on category)' },
+  { code: '6400', name: '6400 · Office Supplies' },
+  { code: '6200', name: '6200 · Software' },
+  { code: '6100', name: '6100 · Rent' },
+  { code: '6300', name: '6300 · Marketing' },
+  { code: '5000', name: '5000 · COGS: Materials' },
+  { code: '5010', name: '5010 · COGS: Production Costs' },
+  { code: '6999', name: '6999 · Miscellaneous Expenses' },
+];
+
+const PAYMENT_METHOD_OPTIONS = [
+  { value: 'ap', label: 'To be paid later (Accounts Payable)' },
+  { value: 'bank', label: 'Paid from Bank: Operating' },
+  { value: 'cash', label: 'Paid from Cash / Card' },
+];
+
+const DEPARTMENT_OPTIONS = [
+  { value: '', label: 'None' },
+  { value: 'general', label: 'General' },
+  { value: 'sales', label: 'Sales' },
+  { value: 'production', label: 'Production' },
+  { value: 'rnd', label: 'R&D' },
+];
+
 export default function ExpensesPage() {
   const { currentOrg } = useAuth();
   const [data, setData] = useState<any[]>([]);
@@ -23,6 +48,12 @@ export default function ExpensesPage() {
     description: '', amount: '', category: 'supplies' as string,
     date: new Date().toISOString().split('T')[0], tags: '', notes: '',
   });
+  const [accountOverride, setAccountOverride] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'ap' | 'bank' | 'cash'>('ap');
+  const [department, setDepartment] = useState('');
+  const [isCapex, setIsCapex] = useState(false);
+  const [taxCode, setTaxCode] = useState('');
+  const [projectCode, setProjectCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [showDetail, setShowDetail] = useState<any>(null);
@@ -45,16 +76,47 @@ export default function ExpensesPage() {
     setSubmitting(true);
     setError('');
     try {
+      const userTags = formData.tags ? formData.tags.split(',').map((t) => t.trim()) : [];
+      const tags = [...userTags];
+
+      if (accountOverride) {
+        tags.push(`acct:${accountOverride}`);
+      }
+
+      if (paymentMethod === 'bank') tags.push('pay:bank');
+      else if (paymentMethod === 'cash') tags.push('pay:cash');
+      else tags.push('pay:ap');
+
+      if (department) {
+        tags.push(`dept:${department.toLowerCase()}`);
+      }
+
+      if (isCapex) {
+        tags.push('capex:true');
+      }
+      if (taxCode) {
+        tags.push(`tax:${taxCode}`);
+      }
+      if (projectCode) {
+        tags.push(`proj:${projectCode}`);
+      }
+
       await api.expenses.create({
         description: formData.description,
         amount: parseFloat(formData.amount),
         category: formData.category,
         date: formData.date,
-        tags: formData.tags ? formData.tags.split(',').map((t) => t.trim()) : [],
+        tags,
         notes: formData.notes || undefined,
       });
       setShowCreate(false);
       setFormData({ description: '', amount: '', category: 'supplies', date: new Date().toISOString().split('T')[0], tags: '', notes: '' });
+      setAccountOverride('');
+      setPaymentMethod('ap');
+      setDepartment('');
+      setIsCapex(false);
+      setTaxCode('');
+      setProjectCode('');
       loadExpenses();
     } catch (err: any) {
       setError(err.message || 'Failed to create expense');
@@ -210,6 +272,88 @@ export default function ExpensesPage() {
           <div>
             <label className="label">Notes</label>
             <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} className="input-field mt-1" rows={2} />
+          </div>
+          <div className="rounded-2xl border border-dashed border-gray-200 bg-surface-50 px-3 py-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+              Accounting details (optional)
+            </p>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div>
+                <label className="label text-xs">Account override</label>
+                <select
+                  value={accountOverride}
+                  onChange={(e) => setAccountOverride(e.target.value)}
+                  className="input-field mt-1 text-xs"
+                >
+                  {ACCOUNT_OPTIONS.map((opt) => (
+                    <option key={opt.code || 'auto'} value={opt.code}>
+                      {opt.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label text-xs">Payment method</label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value as 'ap' | 'bank' | 'cash')}
+                  className="input-field mt-1 text-xs"
+                >
+                  {PAYMENT_METHOD_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label text-xs">Department / cost centre</label>
+                <select
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  className="input-field mt-1 text-xs"
+                >
+                  {DEPARTMENT_OPTIONS.map((opt) => (
+                    <option key={opt.value || 'none'} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+              <label className="inline-flex items-center gap-2 text-[11px] text-gray-500">
+                <input
+                  type="checkbox"
+                  checked={isCapex}
+                  onChange={(e) => setIsCapex(e.target.checked)}
+                  className="h-3 w-3 rounded border-gray-300 text-purple-600"
+                />
+                Treat as fixed asset (capex)
+              </label>
+              <div>
+                <label className="label text-xs">Tax code</label>
+                <select
+                  value={taxCode}
+                  onChange={(e) => setTaxCode(e.target.value)}
+                  className="input-field mt-1 text-xs"
+                >
+                  <option value="">None</option>
+                  <option value="gst_standard">GST - Standard</option>
+                  <option value="gst_free">GST - Free</option>
+                  <option value="out_of_scope">Out of scope</option>
+                </select>
+              </div>
+              <div>
+                <label className="label text-xs">Project / job code</label>
+                <input
+                  value={projectCode}
+                  onChange={(e) => setProjectCode(e.target.value)}
+                  className="input-field mt-1 text-xs"
+                  placeholder="e.g. PROJ-001"
+                />
+              </div>
+            </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={() => setShowCreate(false)} className="btn-secondary">Cancel</button>

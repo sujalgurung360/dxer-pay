@@ -24,44 +24,62 @@ const config = {
 
 let requestId = 0;
 
+const DEFAULT_RPC_TIMEOUT_MS = 15_000;
+const HEALTH_CHECK_TIMEOUT_MS = 4_000;
+
 /**
  * Make a JSON-RPC call to Multichain.
+ * @param timeoutMs - Abort after this many ms (default 15s). Use lower value for health checks.
  */
-async function rpcCall(method: string, params: unknown[] = []): Promise<any> {
+async function rpcCall(method: string, params: unknown[] = [], timeoutMs: number = DEFAULT_RPC_TIMEOUT_MS): Promise<any> {
   const id = ++requestId;
   const url = `http://${config.host}:${config.port}`;
   const auth = Buffer.from(`${config.user}:${config.password}`).toString('base64');
 
   logger.debug({ method, params, url }, 'Multichain RPC call');
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Basic ${auth}`,
-    },
-    body: JSON.stringify({
-      jsonrpc: '1.0',
-      id,
-      method,
-      params,
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!response.ok) {
-    const text = await response.text();
-    logger.error({ status: response.status, body: text }, 'Multichain RPC HTTP error');
-    throw new Error(`Multichain RPC HTTP ${response.status}: ${text}`);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${auth}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '1.0',
+        id,
+        method,
+        params,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const text = await response.text();
+      logger.error({ status: response.status, body: text }, 'Multichain RPC HTTP error');
+      throw new Error(`Multichain RPC HTTP ${response.status}: ${text}`);
+    }
+
+    const data = await response.json();
+
+    if (data.error) {
+      logger.error({ error: data.error }, 'Multichain RPC error');
+      throw new Error(`Multichain RPC error: ${data.error.message} (code: ${data.error.code})`);
+    }
+
+    return data.result;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      logger.warn({ method, timeoutMs }, 'Multichain RPC timeout');
+      throw new Error(`Multichain RPC timeout after ${timeoutMs}ms`);
+    }
+    throw err;
   }
-
-  const data = await response.json();
-
-  if (data.error) {
-    logger.error({ error: data.error }, 'Multichain RPC error');
-    throw new Error(`Multichain RPC error: ${data.error.message} (code: ${data.error.code})`);
-  }
-
-  return data.result;
 }
 
 /**
@@ -69,7 +87,7 @@ async function rpcCall(method: string, params: unknown[] = []): Promise<any> {
  */
 export async function multichainHealthCheck(): Promise<{ connected: boolean; chainName: string; blocks: number }> {
   try {
-    const info = await rpcCall('getinfo');
+    const info = await rpcCall('getinfo', [], HEALTH_CHECK_TIMEOUT_MS);
     return {
       connected: true,
       chainName: info.chainname,

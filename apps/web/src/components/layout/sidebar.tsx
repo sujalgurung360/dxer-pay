@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { useUiMode } from '@/lib/ui-mode';
 import clsx from 'clsx';
 import {
   LayoutDashboard, Receipt, FileText, Users, Factory,
@@ -18,6 +19,7 @@ const topNav = [
   { name: 'Invoices', href: '/invoices' },
   { name: 'Payroll', href: '/payroll' },
   { name: 'Production', href: '/production' },
+  { name: 'Accountancy', href: '/accountancy' },
   { name: 'Activity', href: '/audit' },
   { name: 'Anchoring', href: '/anchoring' },
   { name: 'DXEXPLORER', href: '/dxexplorer' },
@@ -26,6 +28,11 @@ const topNav = [
 export function Sidebar() {
   const pathname = usePathname();
   const { user, currentOrg, signOut } = useAuth();
+
+  const [uiMode] = useUiMode();
+  const navItems = uiMode === 'simple'
+    ? topNav.filter((item) => item.name !== 'Anchoring' && item.name !== 'DXEXPLORER')
+    : topNav;
 
   return (
     <header className="sticky top-0 z-40 w-full">
@@ -42,7 +49,7 @@ export function Sidebar() {
 
             {/* Center Navigation — Crextio pill style */}
             <nav className="hidden lg:flex items-center bg-surface-100 rounded-full px-1.5 py-1.5">
-              {topNav.map((item) => {
+              {navItems.map((item) => {
                 const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
                 return (
                   <Link
@@ -94,7 +101,7 @@ export function Sidebar() {
       {/* Mobile Nav */}
       <div className="lg:hidden overflow-x-auto border-b border-gray-100 bg-white/80 backdrop-blur-xl">
         <div className="flex items-center gap-1 px-4 py-2">
-          {topNav.map((item) => {
+          {navItems.map((item) => {
             const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
             return (
               <Link

@@ -52,8 +52,11 @@ function getWallet(): ethers.Wallet {
   return wallet;
 }
 
+const HEALTH_CHECK_TIMEOUT_MS = 5_000;
+
 /**
  * Check Polygon connection health.
+ * Uses a short timeout so slow RPC does not block the API.
  */
 export async function polygonHealthCheck(): Promise<{
   connected: boolean;
@@ -62,12 +65,19 @@ export async function polygonHealthCheck(): Promise<{
   balance: string;
   walletAddress: string;
 }> {
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Polygon health check timeout')), HEALTH_CHECK_TIMEOUT_MS),
+  );
+
   try {
     const p = getProvider();
     const w = getWallet();
-    const [blockNumber, balance] = await Promise.all([
-      p.getBlockNumber(),
-      p.getBalance(w.address),
+    const [blockNumber, balance] = await Promise.race([
+      Promise.all([
+        p.getBlockNumber(),
+        p.getBalance(w.address),
+      ]),
+      timeoutPromise,
     ]);
 
     return {

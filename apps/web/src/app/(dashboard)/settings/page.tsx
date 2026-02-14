@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { useUiMode } from '@/lib/ui-mode';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/page-header';
 import { Modal } from '@/components/ui/modal';
@@ -10,6 +11,7 @@ import { UserPlus, Building2, Users, Shield } from 'lucide-react';
 
 export default function SettingsPage() {
   const { currentOrg, user, refreshUser } = useAuth();
+  const [uiMode, setUiMode] = useUiMode();
   const [orgDetails, setOrgDetails] = useState<any>(null);
   const [showInvite, setShowInvite] = useState(false);
   const [showCreateOrg, setShowCreateOrg] = useState(false);
@@ -43,6 +45,53 @@ export default function SettingsPage() {
       <PageHeader title="Settings" description="Manage your organization and account" />
 
       <div className="space-y-6 max-w-3xl">
+        {/* Interface mode */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-lg font-serif text-gray-900">Interface mode</h2>
+              <p className="text-xs text-gray-400 mt-1">
+                Switch between a simple Web2 view and the full blockchain-aware experience.
+              </p>
+            </div>
+            <span className="text-xs rounded-full bg-surface-100 px-3 py-1 text-gray-500">
+              {uiMode === 'simple' ? 'Simple mode' : 'Advanced mode'}
+            </span>
+          </div>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setUiMode('simple')}
+              className={`text-left rounded-2xl border p-3 text-sm transition-all ${
+                uiMode === 'simple'
+                  ? 'border-purple-400 bg-purple-50 text-purple-900'
+                  : 'border-gray-100 bg-surface-50 text-gray-700 hover:border-purple-200 hover:bg-purple-50'
+              }`}
+            >
+              <p className="font-semibold">Simple mode</p>
+              <p className="mt-1 text-xs text-gray-500">
+                Hide wallets, anchoring, and DXEXPLORER. Focus on expenses, invoices, payroll,
+                hiring, and accountancy only.
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setUiMode('advanced')}
+              className={`text-left rounded-2xl border p-3 text-sm transition-all ${
+                uiMode === 'advanced'
+                  ? 'border-purple-400 bg-purple-50 text-purple-900'
+                  : 'border-gray-100 bg-surface-50 text-gray-700 hover:border-purple-200 hover:bg-purple-50'
+              }`}
+            >
+              <p className="font-semibold">Advanced mode</p>
+              <p className="mt-1 text-xs text-gray-500">
+                Enable all Web3 features: wallets, anchoring screens, DXEXPLORER, and blockchain
+                status panels.
+              </p>
+            </button>
+          </div>
+        </div>
+
         <div className="card">
           <div className="flex items-center gap-3 mb-4">
             <Building2 className="h-5 w-5 text-purple-400" />

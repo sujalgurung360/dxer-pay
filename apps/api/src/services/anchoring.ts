@@ -547,15 +547,33 @@ export async function dxExplorerVerify(
 
 // ─── Health Check ─────────────────────────────────────────────────
 
+const CHAINS_HEALTH_TIMEOUT_MS = 6_000;
+
 export async function chainsHealthCheck(): Promise<{
   multichain: { connected: boolean; chainName: string; blocks: number };
   polygon: { connected: boolean; network: string; blockNumber: number; balance: string; walletAddress: string };
 }> {
-  const [mc, pg] = await Promise.all([
+  const fallback = {
+    multichain: { connected: false, chainName: 'dxerchain', blocks: 0 },
+    polygon: {
+      connected: false,
+      network: process.env.POLYGON_NETWORK || 'amoy',
+      blockNumber: 0,
+      balance: '0 POL',
+      walletAddress: process.env.POLYGON_WALLET_ADDRESS || '',
+    },
+  };
+
+  const timeoutPromise = new Promise<typeof fallback>((resolve) =>
+    setTimeout(() => resolve(fallback), CHAINS_HEALTH_TIMEOUT_MS),
+  );
+
+  const healthPromise = Promise.all([
     multichainHealthCheck(),
     polygonHealthCheck(),
-  ]);
-  return { multichain: mc, polygon: pg };
+  ]).then(([mc, pg]) => ({ multichain: mc, polygon: pg }));
+
+  return Promise.race([healthPromise, timeoutPromise]);
 }
 
 // ─── Legacy compatibility ─────────────────────────────────────────

@@ -17,6 +17,8 @@ export default function InvoicesPage() {
   const [pagination, setPagination] = useState<any>(null);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [customers, setCustomers] = useState<any[]>([]);
@@ -31,7 +33,11 @@ export default function InvoicesPage() {
     if (!currentOrg) return;
     setLoading(true);
     try {
-      const res = await api.invoices.list({ page: String(page), search });
+      const params: Record<string, string> = { page: String(page) };
+      if (search) params.search = search;
+      if (fromDate) params.dateFrom = fromDate;
+      if (toDate) params.dateTo = toDate;
+      const res = await api.invoices.list(params);
       setData(res.data);
       setPagination(res.pagination);
     } catch (err) { console.error(err); }
@@ -118,6 +124,27 @@ export default function InvoicesPage() {
           <button onClick={openCreateModal} className="btn-primary"><Plus className="mr-2 h-4 w-4" />New Invoice</button>
         }
       />
+
+      <div className="mb-4 flex flex-wrap items-end gap-3 rounded-2xl border border-gray-100 bg-surface-50 px-4 py-3">
+        <div>
+          <label className="label mb-1">From</label>
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(e) => { setFromDate(e.target.value); setPage(1); }}
+            className="input-field"
+          />
+        </div>
+        <div>
+          <label className="label mb-1">To</label>
+          <input
+            type="date"
+            value={toDate}
+            onChange={(e) => { setToDate(e.target.value); setPage(1); }}
+            className="input-field"
+          />
+        </div>
+      </div>
 
       <DataTable
         columns={columns}

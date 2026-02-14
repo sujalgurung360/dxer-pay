@@ -15,6 +15,7 @@ import { batchRoutes } from './routes/production-batches.js';
 import { productionEventRoutes } from './routes/production-events.js';
 import { auditRoutes } from './routes/audit-log.js';
 import { anchorRoutes } from './routes/anchoring.js';
+import { accountancyRoutes } from './routes/accountancy.js';
 import { onboardingRoutes } from './routes/onboarding.js';
 import { hiringRoutes } from './routes/hiring.js';
 import { healthRoutes } from './routes/health.js';
@@ -30,6 +31,7 @@ app.use(cors({
     if (!origin) return callback(null, true);
     const allowed = [
       'http://localhost:3000',
+      'http://localhost:3001', // Next.js dev server (alternate port)
       process.env.CORS_ORIGIN,
     ].filter(Boolean);
     if (allowed.includes(origin) || origin.endsWith('.trycloudflare.com')) {
@@ -76,6 +78,7 @@ app.use('/api/audit-log', auditRoutes);
 app.use('/api/anchoring', anchorRoutes);
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/hiring', hiringRoutes);
+app.use('/api/accountancy', accountancyRoutes);
 
 // ─── Error Handler ───────────────────────────────
 app.use(errorHandler);
