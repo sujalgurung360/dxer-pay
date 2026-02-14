@@ -1,0 +1,1 @@
+feat: KPI dashboard, accountancy reports, simple/advanced UI mode, CORS fix
