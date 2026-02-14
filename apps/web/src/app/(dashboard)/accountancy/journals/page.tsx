@@ -1,161 +1,306 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PageHeader } from '@/components/ui/page-header';
 import { AccountancyAddButtons } from '@/components/accountancy/add-buttons';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { api } from '@/lib/api';
+import { Plus, Trash2, Loader2 } from 'lucide-react';
+
+const ACCOUNTS = [
+  { code: '1000', name: 'Bank: Operating' },
+  { code: '1100', name: 'Accounts Receivable' },
+  { code: '2000', name: 'Accounts Payable' },
+  { code: '2100', name: 'Payroll Liabilities' },
+  { code: '4000', name: 'Revenue' },
+  { code: '6000', name: 'Salary Expense' },
+  { code: '6200', name: 'Software' },
+  { code: '6400', name: 'Office Supplies' },
+  { code: '6999', name: 'Miscellaneous' },
+];
 
 interface DraftLine {
-  id: number;
   accountCode: string;
+  debitAmount: number;
+  creditAmount: number;
   description: string;
-  debit: string;
-  credit: string;
 }
 
 export default function JournalsPage() {
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [reference, setReference] = useState('');
+  const [entryDate, setEntryDate] = useState(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState('');
   const [lines, setLines] = useState<DraftLine[]>([
-    { id: 1, accountCode: '', description: '', debit: '', credit: '' },
-    { id: 2, accountCode: '', description: '', debit: '', credit: '' },
+    { accountCode: '', debitAmount: 0, creditAmount: 0, description: '' },
+    { accountCode: '', debitAmount: 0, creditAmount: 0, description: '' },
   ]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [entries, setEntries] = useState<any[]>([]);
 
-  const totalDebit = lines.reduce((sum, l) => sum + (parseFloat(l.debit) || 0), 0);
-  const totalCredit = lines.reduce((sum, l) => sum + (parseFloat(l.credit) || 0), 0);
+  const totalDebits = lines.reduce((sum, l) => sum + (l.debitAmount || 0), 0);
+  const totalCredits = lines.reduce((sum, l) => sum + (l.creditAmount || 0), 0);
+  const balanced = Math.abs(totalDebits - totalCredits) < 0.01;
+  const hasAmount = totalDebits > 0 && totalCredits > 0;
 
-  const handleLineChange = (id: number, field: keyof DraftLine, value: string) => {
-    setLines((prev) => prev.map((l) => (l.id === id ? { ...l, [field]: value } : l)));
+  const loadEntries = async () => {
+    try {
+      const list = await api.journalEntries.list({ limit: '50' } as any);
+      setEntries(Array.isArray(list) ? list : []);
+    } catch {
+      setEntries([]);
+    }
   };
 
-  const addLine = () => {
-    setLines((prev) => [...prev, { id: prev.length + 1, accountCode: '', description: '', debit: '', credit: '' }]);
-  };
+  useEffect(() => {
+    loadEntries();
+  }, []);
+
+  function addLine() {
+    setLines([...lines, { accountCode: '', debitAmount: 0, creditAmount: 0, description: '' }]);
+  }
+
+  function removeLine(index: number) {
+    if (lines.length > 2) {
+      setLines(lines.filter((_, i) => i !== index));
+    }
+  }
+
+  function updateLine(index: number, field: keyof DraftLine, value: string | number) {
+    const updated = [...lines];
+    updated[index] = { ...updated[index], [field]: value };
+    if (field === 'debitAmount' && Number(value) > 0) updated[index].creditAmount = 0;
+    if (field === 'creditAmount' && Number(value) > 0) updated[index].debitAmount = 0;
+    setLines(updated);
+  }
+
+  async function handleSave() {
+    if (!balanced || !hasAmount) {
+      setError('Entry must balance: debits must equal credits');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    setSuccess(false);
+    try {
+      await api.journalEntries.create({
+        entryDate,
+        description: description || 'Manual entry',
+        lines: lines
+          .filter((l) => (l.debitAmount || 0) > 0 || (l.creditAmount || 0) > 0)
+          .map((l) => ({
+            accountCode: l.accountCode,
+            debitAmount: l.debitAmount || undefined,
+            creditAmount: l.creditAmount || undefined,
+            description: l.description || undefined,
+          })),
+      });
+      setSuccess(true);
+      setDescription('');
+      setLines([
+        { accountCode: '', debitAmount: 0, creditAmount: 0, description: '' },
+        { accountCode: '', debitAmount: 0, creditAmount: 0, description: '' },
+      ]);
+      loadEntries();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to save journal entry');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title="Journals & Adjustments"
-        description="Shell for manual journal entries and adjustments"
+        description="Create manual journal entries and view posted entries"
         actions={<AccountancyAddButtons />}
       />
 
-      <div className="card mb-6">
-        <h2 className="mb-3 text-sm font-semibold text-gray-900">New Journal Entry (shell)</h2>
-        <p className="mb-3 text-xs text-gray-400">
-          This form lets an accountant express complex manual adjustments in a structured way.
-          Persistence and posting logic can be wired in a later iteration.
-        </p>
-        <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div>
-            <label className="label">Date</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input-field mt-1" />
+      <Card>
+        <CardHeader>
+          <CardTitle>New Journal Entry</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium">Date</label>
+              <Input
+                type="date"
+                value={entryDate}
+                onChange={(e) => setEntryDate(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Description</label>
+              <Input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Adjusting entry for..."
+                className="mt-1"
+              />
+            </div>
           </div>
-          <div>
-            <label className="label">Reference</label>
-            <input
-              value={reference}
-              onChange={(e) => setReference(e.target.value)}
-              className="input-field mt-1"
-              placeholder="e.g. ADJ-001"
-            />
-          </div>
-          <div>
-            <label className="label">Description</label>
-            <input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="input-field mt-1"
-              placeholder="Year-end accrual, reclassification, etc."
-            />
-          </div>
-        </div>
 
-        <div className="overflow-x-auto rounded-xl border border-gray-100">
-          <table className="min-w-full text-left text-xs">
-            <thead className="border-b border-gray-100 bg-surface-50 text-gray-400">
-              <tr>
-                <th className="px-3 py-2 font-normal">Account Code</th>
-                <th className="px-3 py-2 font-normal">Line Description</th>
-                <th className="px-3 py-2 text-right font-normal">Debit</th>
-                <th className="px-3 py-2 text-right font-normal">Credit</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((line) => (
-                <tr key={line.id} className="border-t border-gray-50">
-                  <td className="px-3 py-1.5">
-                    <input
-                      className="input-field h-7 text-[11px]"
-                      placeholder="e.g. 6400"
-                      value={line.accountCode}
-                      onChange={(e) => handleLineChange(line.id, 'accountCode', e.target.value)}
-                    />
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <input
-                      className="input-field h-7 text-[11px]"
-                      placeholder="memo"
-                      value={line.description}
-                      onChange={(e) => handleLineChange(line.id, 'description', e.target.value)}
-                    />
-                  </td>
-                  <td className="px-3 py-1.5 text-right">
-                    <input
-                      className="input-field h-7 text-right text-[11px]"
-                      type="number"
-                      step="0.01"
-                      value={line.debit}
-                      onChange={(e) => handleLineChange(line.id, 'debit', e.target.value)}
-                    />
-                  </td>
-                  <td className="px-3 py-1.5 text-right">
-                    <input
-                      className="input-field h-7 text-right text-[11px]"
-                      type="number"
-                      step="0.01"
-                      value={line.credit}
-                      onChange={(e) => handleLineChange(line.id, 'credit', e.target.value)}
-                    />
-                  </td>
-                </tr>
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="font-medium">Lines</h4>
+              <Button size="sm" variant="outline" onClick={addLine}>
+                <Plus className="mr-1 h-4 w-4" />
+                Add Line
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              {lines.map((line, index) => (
+                <div key={index} className="flex flex-wrap gap-2 items-center">
+                  <Select
+                    value={line.accountCode}
+                    onValueChange={(v) => updateLine(index, 'accountCode', v)}
+                  >
+                    <SelectTrigger className="w-64">
+                      <SelectValue placeholder="Select account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ACCOUNTS.map((acc) => (
+                        <SelectItem key={acc.code} value={acc.code}>
+                          {acc.code} - {acc.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    placeholder="Debit"
+                    value={line.debitAmount || ''}
+                    onChange={(e) =>
+                      updateLine(index, 'debitAmount', parseFloat(e.target.value) || 0)
+                    }
+                    className="w-32"
+                  />
+
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    placeholder="Credit"
+                    value={line.creditAmount || ''}
+                    onChange={(e) =>
+                      updateLine(index, 'creditAmount', parseFloat(e.target.value) || 0)
+                    }
+                    className="w-32"
+                  />
+
+                  <Input
+                    placeholder="Description"
+                    value={line.description}
+                    onChange={(e) => updateLine(index, 'description', e.target.value)}
+                    className="flex-1 min-w-[120px]"
+                  />
+
+                  {lines.length > 2 && (
+                    <Button size="sm" variant="ghost" onClick={() => removeLine(index)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               ))}
-              <tr className="border-t border-gray-100 bg-surface-50">
-                <td className="px-3 py-1.5 text-xs text-gray-500" colSpan={2}>
-                  Totals
-                </td>
-                <td className="px-3 py-1.5 text-right text-xs font-semibold text-gray-800">
-                  {totalDebit.toFixed(2)}
-                </td>
-                <td className="px-3 py-1.5 text-right text-xs font-semibold text-gray-800">
-                  {totalCredit.toFixed(2)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+            </div>
+          </div>
 
-        <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
-          <button type="button" onClick={addLine} className="text-purple-600 hover:text-purple-700">
-            + Add line
-          </button>
-          <span>
-            Difference:{' '}
-            <span className={totalDebit === totalCredit ? 'text-emerald-600' : 'text-red-600'}>
-              {(totalDebit - totalCredit).toFixed(2)}
-            </span>
-          </span>
-        </div>
-      </div>
+          <div className="flex items-center justify-between border-t pt-4">
+            <div className="space-y-1">
+              <div className="flex gap-4 text-sm">
+                <span>
+                  Total Debits: <strong>${totalDebits.toFixed(2)}</strong>
+                </span>
+                <span>
+                  Total Credits: <strong>${totalCredits.toFixed(2)}</strong>
+                </span>
+              </div>
+              {!balanced && (
+                <p className="text-sm text-red-600">
+                  Entry doesn&apos;t balance (difference: $
+                  {Math.abs(totalDebits - totalCredits).toFixed(2)})
+                </p>
+              )}
+              {balanced && hasAmount && (
+                <p className="text-sm text-green-600">Entry is balanced</p>
+              )}
+              {error && <p className="text-sm text-red-600">{error}</p>}
+              {success && (
+                <p className="text-sm text-green-600">Journal entry created successfully</p>
+              )}
+            </div>
 
-      <div className="card">
-        <h2 className="mb-2 text-sm font-semibold text-gray-900">Existing Journals (placeholder)</h2>
-        <p className="text-xs text-gray-400">
-          In a later phase this table will list both system-generated and manual journal entries. For now
-          it serves as a visual placeholder for where an accountant will review postings.
-        </p>
-      </div>
+            <Button
+              onClick={handleSave}
+              disabled={!balanced || !hasAmount || saving}
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Journal Entry'
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Journal Entries</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            System-generated and manual journal entries
+          </p>
+        </CardHeader>
+        <CardContent>
+          {entries.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No journal entries yet. Create one above or approve expenses, create invoices, or
+              complete payroll to generate entries.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {entries.slice(0, 20).map((entry: any) => (
+                <div
+                  key={entry.id}
+                  className="flex items-center justify-between rounded-lg border p-3"
+                >
+                  <div>
+                    <p className="font-medium">
+                      {entry.entry_number} — {entry.description || 'No description'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(entry.entry_date).toLocaleDateString()} • {entry.reference_type || 'manual'} •{' '}
+                      {entry.status}
+                    </p>
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    {(entry.lines || []).length} lines
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
-

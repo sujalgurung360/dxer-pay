@@ -1,12 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/page-header';
 import { useAuth } from '@/lib/auth-context';
+import { useUiMode } from '@/lib/ui-mode';
 import { formatCurrency } from '@dxer/shared';
 import { AccountancyAddButtons } from '@/components/accountancy/add-buttons';
 import { Modal } from '@/components/ui/modal';
+import { CheckCircle, XCircle, AlertCircle, Loader2, AlertTriangle } from 'lucide-react';
 
 type Basis = 'accrual' | 'cash';
 
@@ -38,6 +41,7 @@ type CompareMode = 'none' | 'prev_period' | 'last_year';
 
 export default function ProfitAndLossPage() {
   const { currentOrg } = useAuth();
+  const [uiMode] = useUiMode();
   const today = new Date();
   const isoToday = today.toISOString().split('T')[0];
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
@@ -60,6 +64,10 @@ export default function ProfitAndLossPage() {
   const [blockchainInfo, setBlockchainInfo] = useState<{ anchored: number; total: number } | null>(
     null,
   );
+  const [showCheckModal, setShowCheckModal] = useState(false);
+  const [checkResults, setCheckResults] = useState<any>(null);
+  const [checkLoading, setCheckLoading] = useState(false);
+  const [closing, setClosing] = useState(false);
 
   const periodDays = useMemo(() => {
     const fromDate = new Date(from);
@@ -167,6 +175,53 @@ export default function ProfitAndLossPage() {
     return periodDays > 0 && periodDays < daysInMonth;
   }, [from, periodDays]);
 
+  const periodYear = useMemo(() => new Date(from).getFullYear(), [from]);
+  const periodMonth = useMemo(() => new Date(from).getMonth() + 1, [from]);
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  const handleMonthEndCheck = async () => {
+    setCheckLoading(true);
+    setCheckResults(null);
+    setShowCheckModal(true);
+    try {
+      const res = (await api.accountancy.monthEndCheck(periodYear, periodMonth)) as any;
+      setCheckResults(res.data);
+    } catch (err: any) {
+      setCheckResults({ error: err.message });
+    } finally {
+      setCheckLoading(false);
+    }
+  };
+
+  const handleConfirmClose = async () => {
+    setClosing(true);
+    try {
+      await api.accountancy.closePeriod(periodYear, periodMonth);
+      setShowCheckModal(false);
+      setCheckResults(null);
+      loadData();
+    } catch (err: any) {
+      setCheckResults((prev: any) => (prev ? { ...prev, error: err.message } : { error: err.message }));
+    } finally {
+      setClosing(false);
+    }
+  };
+
+  const handleForceClose = async () => {
+    if (!confirm('Force close anyway? This is not recommended when checks have failed.')) return;
+    setClosing(true);
+    try {
+      await api.accountancy.closePeriod(periodYear, periodMonth, true);
+      setShowCheckModal(false);
+      setCheckResults(null);
+      loadData();
+    } catch (err: any) {
+      setCheckResults((prev: any) => (prev ? { ...prev, error: err.message } : { error: err.message }));
+    } finally {
+      setClosing(false);
+    }
+  };
+
   const handleSwitchToFullMonth = () => {
     const fromDate = new Date(from);
     const start = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1)
@@ -186,6 +241,35 @@ export default function ProfitAndLossPage() {
         description="Automated P&L generated from DXER expenses, invoices, and payrolls"
         actions={<AccountancyAddButtons />}
       />
+
+      {/* Executive summary (AI-generated) */}
+      {currentPl?.summary && (
+        <div className="mb-6 rounded-2xl border border-purple-100 bg-purple-50/50 p-4">
+          <h2 className="mb-2 text-sm font-semibold text-purple-800">Executive Summary</h2>
+          <p className="text-sm text-gray-700 leading-relaxed">{currentPl.summary}</p>
+          {currentPl.insights && Array.isArray(currentPl.insights) && currentPl.insights.length > 0 && (
+            <div className="mt-4 space-y-2">
+              <h4 className="text-xs font-medium text-purple-700">Key insights</h4>
+              {currentPl.insights.map((insight: any, i: number) => (
+                <div
+                  key={i}
+                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${
+                    insight.type === 'warning' ? 'bg-amber-100 text-amber-800' : 'bg-white text-gray-700'
+                  }`}
+                >
+                  {insight.type === 'warning' && <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />}
+                  <span>{insight.message}</span>
+                  {insight.action && (
+                    <Link href={insight.action} className="ml-auto text-purple-600 hover:text-purple-700 font-medium">
+                      View →
+                    </Link>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Export / actions bar */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -212,15 +296,26 @@ export default function ProfitAndLossPage() {
           >
             Email Report
           </button>
+          {uiMode === 'advanced' && (
+            <button
+              type="button"
+              className="btn-secondary !px-3 !py-1"
+              onClick={() => alert('Blockchain verification modal can be extended with dxExplorer.')}
+            >
+              Blockchain Proof
+            </button>
+          )}
           <button
             type="button"
-            className="btn-secondary !px-3 !py-1"
-            onClick={() => alert('Blockchain verification modal can be extended with dxExplorer.')}
+            className="btn-primary !px-3 !py-1"
+            onClick={handleMonthEndCheck}
+            disabled={checkLoading}
           >
-            Blockchain Proof
+            {checkLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin inline mr-1" /> : null}
+            Close {new Date(from).toLocaleString('default', { month: 'long' })} {new Date(from).getFullYear()}
           </button>
         </div>
-        {blockchainInfo && (
+        {uiMode === 'advanced' && blockchainInfo && (
           <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] text-emerald-700">
             ✓ Anchored {blockchainInfo.anchored}/{blockchainInfo.total} transactions in period
           </div>
@@ -427,6 +522,134 @@ export default function ProfitAndLossPage() {
           Detailed drilldown for account {drillAccountCode}. This can be wired to use the General
           Ledger endpoint to list individual transactions for this account and period.
         </p>
+      </Modal>
+
+      {/* Month-end close check modal */}
+      <Modal
+        isOpen={showCheckModal}
+        onClose={() => { setShowCheckModal(false); setCheckResults(null); }}
+        title={
+          checkResults?.error
+            ? 'Error'
+            : checkResults?.canClose
+              ? `Ready to close ${monthNames[periodMonth - 1]} ${periodYear}`
+              : 'Issues found – cannot close yet'
+        }
+        size="lg"
+      >
+        {checkLoading && !checkResults ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+          </div>
+        ) : checkResults?.error ? (
+          <p className="text-sm text-red-600">{checkResults.error}</p>
+        ) : checkResults?.checks ? (
+          <div className="space-y-4">
+            {/* Summary cards */}
+            {checkResults.summary != null && (
+              <div className="grid grid-cols-4 gap-3">
+                <div className="text-center p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                  <div className="text-2xl font-bold text-emerald-600">{checkResults.summary.passed ?? 0}</div>
+                  <div className="text-xs text-emerald-700 font-medium">Passed</div>
+                </div>
+                <div className="text-center p-3 rounded-xl bg-red-50 border border-red-200">
+                  <div className="text-2xl font-bold text-red-600">{checkResults.summary.failed ?? 0}</div>
+                  <div className="text-xs text-red-700 font-medium">Failed</div>
+                </div>
+                <div className="text-center p-3 rounded-xl bg-amber-50 border border-amber-200">
+                  <div className="text-2xl font-bold text-amber-600">{checkResults.summary.warnings ?? 0}</div>
+                  <div className="text-xs text-amber-700 font-medium">Warnings</div>
+                </div>
+                <div className="text-center p-3 rounded-xl bg-purple-50 border border-purple-200">
+                  <div className="text-2xl font-bold text-purple-600">{checkResults.summary.critical ?? 0}</div>
+                  <div className="text-xs text-purple-700 font-medium">Critical</div>
+                </div>
+              </div>
+            )}
+
+            {checkResults.checks.map((check: any) => (
+              <div
+                key={check.id}
+                className={`rounded-xl border p-4 ${
+                  check.status === 'passed' ? 'bg-emerald-50 border-emerald-200' :
+                  check.status === 'failed' ? 'bg-red-50 border-red-200' :
+                  check.status === 'warning' ? 'bg-amber-50 border-amber-200' :
+                  'bg-gray-50 border-gray-200'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {check.status === 'passed' && <CheckCircle className="h-4 w-4 text-emerald-600" />}
+                  {check.status === 'failed' && <XCircle className="h-4 w-4 text-red-600" />}
+                  {(check.status === 'warning' || check.status === 'info') && <AlertTriangle className="h-4 w-4 text-amber-600" />}
+                  <h3 className="font-medium">{check.name}</h3>
+                  {check.count != null && check.count > 0 && (
+                    <span className="text-xs text-gray-500">({check.count})</span>
+                  )}
+                </div>
+                <p className="mt-1 text-sm text-gray-700">{check.message}</p>
+                {check.action && check.status !== 'passed' && (
+                  <Link href={check.action} className="mt-2 inline-block text-xs text-purple-600 hover:text-purple-700 font-medium">
+                    Fix issues →
+                  </Link>
+                )}
+                {check.items && check.items.length > 0 && (
+                  <ul className="mt-2 space-y-1 text-xs">
+                    {check.items.slice(0, 5).map((item: any, i: number) => (
+                      <li key={item.id || i} className="text-gray-600">
+                        {item.description} — {formatCurrency(item.amount)}
+                        {item.suggestion != null && (
+                          <span className="text-gray-500 ml-2">({item.suggestion})</span>
+                        )}
+                        {item.aiSuggestion != null && (
+                          <span className="text-gray-500 ml-2">(AI: {item.aiSuggestion})</span>
+                        )}
+                      </li>
+                    ))}
+                    {check.items.length > 5 && (
+                      <li className="text-gray-400 italic">… and {check.items.length - 5} more</li>
+                    )}
+                  </ul>
+                )}
+              </div>
+            ))}
+
+            {/* Footer: Approve & Close / Force Close */}
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-4 border-t border-gray-100">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => { setShowCheckModal(false); setCheckResults(null); }}
+                disabled={closing}
+              >
+                Cancel
+              </button>
+              {checkResults.canClose ? (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleConfirmClose}
+                  disabled={closing}
+                >
+                  {closing ? <Loader2 className="h-4 w-4 animate-spin inline mr-2" /> : null}
+                  Approve & close {monthNames[periodMonth - 1]} {periodYear}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-secondary border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                  onClick={handleForceClose}
+                  disabled={(checkResults.summary?.critical ?? 0) > 0 || closing}
+                  title={(checkResults.summary?.critical ?? 0) > 0 ? 'Cannot force close with critical issues' : 'Not recommended'}
+                >
+                  {closing ? <Loader2 className="h-4 w-4 animate-spin inline mr-2" /> : null}
+                  {(checkResults.summary?.critical ?? 0) > 0
+                    ? 'Cannot force close (critical issues)'
+                    : 'Force close anyway'}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : null}
       </Modal>
     </div>
   );

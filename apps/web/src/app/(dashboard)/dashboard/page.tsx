@@ -34,6 +34,7 @@ export default function DashboardPage() {
   const [queueStatus, setQueueStatus] = useState<any>(null);
   const [anchorJobs, setAnchorJobs] = useState<any[]>([]);
   const [unpaidInvoicesCount, setUnpaidInvoicesCount] = useState<number | null>(null);
+  const [flaggedExpenses, setFlaggedExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [walletCopied, setWalletCopied] = useState(false);
   const [metamaskConnecting, setMetamaskConnecting] = useState(false);
@@ -42,11 +43,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!currentOrg) return;
-    loadDashboard();
+    loadDashboard(uiMode === 'advanced');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentOrg]);
+  }, [currentOrg, uiMode]);
 
-  async function loadDashboard() {
+  async function loadDashboard(loadAnchoring: boolean) {
     setLoading(true);
     try {
       const today = new Date();
@@ -55,30 +56,33 @@ export default function DashboardPage() {
       fromDate.setDate(fromDate.getDate() - 30);
       const from = fromDate.toISOString().slice(0, 10);
 
-      const [pnlRes, burnRes, auditRes, unpaidInvRes] = await Promise.all([
+      const [pnlRes, burnRes, auditRes, unpaidInvRes, flaggedRes] = await Promise.all([
         api.accountancy.profitAndLoss({ from, to, basis: 'accrual' }),
         api.accountancy.burnRate({ from, to }),
         api.audit.list({ pageSize: '25' }),
         api.invoices.list({ status: 'sent', pageSize: '1' }),
+        api.expenses.list({ filter: 'needs_review', pageSize: '5' }),
       ]);
 
       setPnl(pnlRes.data);
       setBurnRate(burnRes.data);
       setLedger(auditRes.data || []);
       setUnpaidInvoicesCount(unpaidInvRes.pagination?.total ?? null);
+      setFlaggedExpenses(flaggedRes.data || []);
 
-      // Load chain / queue / recent anchor jobs in the background
-      Promise.all([
-        api.anchoring.health(),
-        api.anchoring.queue(),
-        api.anchoring.jobs(),
-      ])
-        .then(([healthRes, queueRes, jobsRes]) => {
-          setChainHealth(healthRes.data);
-          setQueueStatus(queueRes.data);
-          setAnchorJobs(jobsRes.data || []);
-        })
-        .catch(() => {});
+      if (loadAnchoring) {
+        Promise.all([
+          api.anchoring.health(),
+          api.anchoring.queue(),
+          api.anchoring.jobs(),
+        ])
+          .then(([healthRes, queueRes, jobsRes]) => {
+            setChainHealth(healthRes.data);
+            setQueueStatus(queueRes.data);
+            setAnchorJobs(jobsRes.data || []);
+          })
+          .catch(() => {});
+      }
     } catch (err) {
       console.error('Failed to load dashboard', err);
     } finally {
@@ -268,8 +272,42 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Quick actions (right) */}
-            <div className="card lg:col-span-4">
+            {/* Items Need Review + Quick actions (right) */}
+            <div className="lg:col-span-4 space-y-4">
+            {flaggedExpenses.length > 0 && (
+              <div className="card">
+                <h2 className="mb-3 text-lg font-serif text-gray-900 flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-amber-600" />
+                  Items Need Review ({flaggedExpenses.length})
+                </h2>
+                <div className="space-y-2">
+                  {flaggedExpenses.slice(0, 5).map((expense: any) => (
+                    <Link
+                      key={expense.id}
+                      href={`/expenses?filter=needs_review`}
+                      className="flex items-center justify-between p-3 rounded-xl border border-amber-100 bg-amber-50/50 hover:bg-amber-50 transition-colors"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 truncate max-w-[180px]">
+                          {expense.description}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {formatCurrency(expense.amount)} · {(expense.flags?.[0]?.type || 'flag').replace(/_/g, ' ')}
+                        </p>
+                      </div>
+                      <span className="text-xs font-medium text-amber-700">Review</span>
+                    </Link>
+                  ))}
+                  <Link
+                    href="/expenses?filter=needs_review"
+                    className="block w-full text-center text-sm text-purple-600 hover:text-purple-700 font-medium py-2"
+                  >
+                    View All Flagged Items
+                  </Link>
+                </div>
+              </div>
+            )}
+            <div className="card">
               <h2 className="mb-3 text-lg font-serif text-gray-900">Quick actions</h2>
               <div className="space-y-2">
                 <Link href="/invoices" className="btn-primary w-full justify-between">
@@ -321,6 +359,7 @@ export default function DashboardPage() {
                 )}
               </div>
             </div>
+            </div>
           </div>
 
           {/* Row 3 — Ledger / Transactions table */}
@@ -355,7 +394,9 @@ export default function DashboardPage() {
                       <th className="py-2 pr-3 text-left">Counterparty</th>
                       <th className="py-2 pr-3 text-right">Amount</th>
                       <th className="py-2 pr-3 text-left">Status</th>
-                      <th className="py-2 text-right">Anchor</th>
+                      {uiMode === 'advanced' && (
+                        <th className="py-2 text-right">Anchor</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -412,19 +453,21 @@ export default function DashboardPage() {
                               </span>
                             </span>
                           </td>
-                          <td className="py-2 text-right">
-                            {anchored ? (
-                              <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
-                                <ShieldCheck className="h-3 w-3" />
-                                Anchored
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-xs text-gray-400">
-                                <Shield className="h-3 w-3" />
-                                Pending
-                              </span>
-                            )}
-                          </td>
+                          {uiMode === 'advanced' && (
+                            <td className="py-2 text-right">
+                              {anchored ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                                  <ShieldCheck className="h-3 w-3" />
+                                  Anchored
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+                                  <Shield className="h-3 w-3" />
+                                  Pending
+                                </span>
+                              )}
+                            </td>
+                          )}
                         </tr>
                       );
                     })}

@@ -63,6 +63,7 @@ export const createExpenseSchema = z.object({
   tags: z.array(z.string().max(50)).max(10).default([]),
   notes: z.string().max(2000).optional(),
   productionBatchId: z.string().uuid().optional().nullable(),
+  receiptUrl: z.string().url().optional().nullable(),
 });
 
 export const updateExpenseSchema = createExpenseSchema.partial();
@@ -74,6 +75,9 @@ export const expenseFilterSchema = paginationSchema.extend({
   dateTo: z.string().optional(),
   minAmount: z.coerce.number().optional(),
   maxAmount: z.coerce.number().optional(),
+  filter: z
+    .enum(['all', 'needs_review', 'missing_receipts', 'uncategorized'])
+    .optional(),
 });
 
 // ─── Invoice ─────────────────────────────────────

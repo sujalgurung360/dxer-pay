@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/page-header';
 import { DataTable } from '@/components/ui/data-table';
+import { useUiMode } from '@/lib/ui-mode';
 import { AnchorBadge, AnchorDetail } from '@/components/ui/anchor-badge';
 import { Modal } from '@/components/ui/modal';
 import { AUDIT_ACTIONS, AUDIT_ENTITY_TYPES } from '@dxer/shared';
@@ -15,6 +16,7 @@ import {
 
 export default function ActivityLogPage() {
   const { currentOrg } = useAuth();
+  const [uiMode] = useUiMode();
   const [data, setData] = useState<any[]>([]);
   const [pagination, setPagination] = useState<any>(null);
   const [page, setPage] = useState(1);
@@ -98,32 +100,35 @@ export default function ActivityLogPage() {
           <span className="inline-flex items-center rounded-full bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700">
             v{row.version || 1}
           </span>
-          {row.previousPolygonTx && (
+          {uiMode === 'advanced' && row.previousPolygonTx && (
             <Link2 className="h-3 w-3 text-purple-400" title="Linked to previous version" />
           )}
         </div>
       ),
     },
-    {
-      key: 'anchor', header: 'Proof',
-      render: (row: any) => (
-        <AnchorBadge
-          polygonTxHash={row.polygonTxhash}
-          multichainTxId={row.multichainTxid}
-          entityType={row.entityType}
-          entityId={row.entityId}
-          integrityStatus={row.integrityStatus}
-          showLabel
-        />
-      ),
-    },
+    ...(uiMode === 'advanced'
+      ? [{
+          key: 'anchor' as const,
+          header: 'Proof',
+          render: (row: any) => (
+            <AnchorBadge
+              polygonTxHash={row.polygonTxhash}
+              multichainTxId={row.multichainTxid}
+              entityType={row.entityType}
+              entityId={row.entityId}
+              integrityStatus={row.integrityStatus}
+              showLabel
+            />
+          ),
+        }]
+      : []),
   ];
 
   return (
     <div>
       <PageHeader
         title="Activity Log"
-        description="Complete trail of all actions with blockchain-backed version chain"
+        description={uiMode === 'advanced' ? 'Complete trail of all actions with blockchain-backed version chain' : 'Complete trail of all actions'}
       />
 
       {/* Filters */}
@@ -244,8 +249,8 @@ export default function ActivityLogPage() {
               </div>
             )}
 
-            {/* Version Chain Link */}
-            {showDetail.previousPolygonTx && (
+            {/* Version Chain Link (advanced only) */}
+            {uiMode === 'advanced' && showDetail.previousPolygonTx && (
               <div className="rounded-lg border border-purple-200 bg-purple-50 p-3">
                 <div className="flex items-center gap-2 mb-1.5">
                   <GitBranch className="h-4 w-4 text-purple-600" />
@@ -272,7 +277,8 @@ export default function ActivityLogPage() {
               </div>
             )}
 
-            {/* Version Timeline */}
+            {/* Version Timeline (advanced: shows polygon links) */}
+            {uiMode === 'advanced' && (
             <div>
               <button
                 onClick={() => setShowVersionChain(!showVersionChain)}
@@ -374,8 +380,10 @@ export default function ActivityLogPage() {
                 </div>
               )}
             </div>
+            )}
 
-            {/* Blockchain Proof */}
+            {/* Blockchain Proof (advanced only) */}
+            {uiMode === 'advanced' && (
             <AnchorDetail
               polygonTxHash={showDetail.polygonTxhash}
               multichainTxId={showDetail.multichainTxid}
@@ -383,6 +391,7 @@ export default function ActivityLogPage() {
               entityId={showDetail.entityId}
               integrityStatus={showDetail.integrityStatus}
             />
+            )}
           </div>
         )}
       </Modal>

@@ -6,6 +6,7 @@ import { validateBody, validateQuery } from '../middleware/validate.js';
 import { NotFoundError, ForbiddenError, AppError } from '../lib/errors.js';
 import { writeAuditLog, getClientInfo } from '../services/audit.js';
 import { generateInvoiceHtml } from '../services/invoice-pdf.js';
+import { createInvoiceJournal, createInvoicePaymentJournal } from '../services/auto-journal.js';
 import { Prisma } from '@prisma/client';
 import { triggerAutoAnchor } from '../middleware/auto-anchor.js';
 
@@ -206,6 +207,7 @@ invoiceRoutes.post('/', requireRole('accountant'), validateBody(createInvoiceSch
             })),
           },
         },
+        include: { line_items: true },
       });
 
       await writeAuditLog({
@@ -219,6 +221,12 @@ invoiceRoutes.post('/', requireRole('accountant'), validateBody(createInvoiceSch
       });
 
       triggerAutoAnchor({ entityType: 'invoice', entityId: invoice.id, orgId: authReq.orgId!, userId: authReq.userId, action: 'create' });
+
+      try {
+        await createInvoiceJournal(invoice, authReq.userId);
+      } catch (err) {
+        console.error('Failed to create journal entry for invoice:', err);
+      }
 
       res.status(201).json({ success: true, data: { id: invoice.id, invoiceNumber } });
     } catch (err) { next(err); }
@@ -249,10 +257,22 @@ invoiceRoutes.post('/:id/status', requireRole('accountant'),
         throw new AppError(400, 'INVALID_TRANSITION', `Cannot transition from ${invoice.status} to ${status}`);
       }
 
-      await prisma.invoices.update({
+      const updated = await prisma.invoices.update({
         where: { id: req.params.id },
         data: { status },
+        include: { line_items: true },
       });
+
+      if (status === 'paid') {
+        try {
+          await createInvoicePaymentJournal(
+            { ...updated, payment_date: new Date() },
+            authReq.userId,
+          );
+        } catch (err) {
+          console.error('Failed to create payment journal for invoice:', err);
+        }
+      }
 
       await writeAuditLog({
         orgId: authReq.orgId!,

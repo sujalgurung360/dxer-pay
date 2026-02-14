@@ -33,8 +33,13 @@ model organizations {
   slug                    String   @unique
   owner_id                String   @db.Uuid
   registration_number     String?  // Business registration / tax ID
+  ein                     String?  // EIN for tax forms
   business_type           String?  // LLC, Corporation, Sole Proprietor, etc.
   country                 String?
+  address                 String?
+  city                    String?
+  state                   String?
+  zip                     String?
   wallet_address          String?  // Polygon public address (auto-generated)
   wallet_private_key_enc  String?  // Encrypted private key (never exposed to client)
   metamask_address        String?  // User-connected MetaMask address (optional)
@@ -45,6 +50,11 @@ model organizations {
   customers           customers[]
   employees           employees[]
   expenses            expenses[]
+  fixed_assets        fixed_assets[]
+  anomaly_detection_stats anomaly_detection_stats[]
+  accounting_periods   accounting_periods[]
+  contractors         contractors[]
+  tax_packages        tax_packages[]
   invoices            invoices[]
   payrolls            payrolls[]
   production_batches  production_batches[]
@@ -54,6 +64,8 @@ model organizations {
   audit_log           audit_log[]
   dxer_anchor_jobs    dxer_anchor_jobs[]
   dxer_sequences      dxer_sequences[]
+  chart_of_accounts   chart_of_accounts[]
+  journal_entries     journal_entries[]
 }
 
 model organization_members {
@@ -112,6 +124,12 @@ model employees {
   invite_token           String?   @unique
   invite_expires_at      DateTime? @db.Timestamptz()
   contract_signed_at     DateTime? @db.Timestamptz()
+  ssn                    String?   // Encrypted in production
+  address                String?
+  city                   String?
+  state                  String?
+  zip                    String?
+  filing_status          String?  // single, married, head_of_household
   multichain_data_hex    String?
   multichain_txid        String?
   polygon_txhash         String?
@@ -183,6 +201,9 @@ model expenses {
   notes               String?
   receipt_url         String?
   production_batch_id String?   @db.Uuid
+  contractor_id       String?   @db.Uuid
+  flags               Json?     // AI anomaly flags
+  needs_review        Boolean?  @default(false)
   multichain_data_hex String?
   multichain_txid     String?
   polygon_txhash      String?
@@ -191,10 +212,108 @@ model expenses {
 
   organization     organizations       @relation(fields: [org_id], references: [id], onDelete: Cascade)
   production_batch production_batches? @relation(fields: [production_batch_id], references: [id])
+  contractor        contractors?       @relation(fields: [contractor_id], references: [id])
 
   @@index([org_id])
   @@index([org_id, date])
   @@index([org_id, status])
+  @@index([contractor_id])
+}
+
+model fixed_assets {
+  id                      String    @id @default(uuid()) @db.Uuid
+  org_id                  String    @db.Uuid
+  name                    String
+  description             String?
+  category                String?   // computers, furniture, vehicles, equipment, machinery
+  purchase_date           DateTime  @db.Date
+  cost                    Decimal   @db.Decimal(15, 2)
+  useful_life_years       Int
+  depreciation_method     String    @default("straight_line")
+  salvage_value           Decimal   @default(0) @db.Decimal(12, 2)
+  accumulated_depreciation Decimal @default(0) @db.Decimal(12, 2)
+  status                  String    @default("active") // active, disposed, fully_depreciated
+  disposal_date           DateTime? @db.Date
+  disposal_proceeds       Decimal?  @db.Decimal(12, 2)
+  disposal_method         String?  // sold, scrapped, donated, traded
+  expense_id              String?   @db.Uuid
+  multichain_data_hex     String?
+  multichain_txid         String?
+  polygon_txhash          String?
+  created_at              DateTime  @default(now()) @db.Timestamptz()
+  updated_at              DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  organization    organizations        @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  depreciation_entries depreciation_entries[]
+
+  @@index([org_id])
+  @@index([org_id, status])
+}
+
+model depreciation_entries {
+  id                  String   @id @default(uuid()) @db.Uuid
+  asset_id             String   @db.Uuid
+  org_id               String   @db.Uuid
+  period_year          Int
+  period_month         Int
+  depreciation_amount  Decimal  @db.Decimal(12, 2)
+  accumulated_total   Decimal  @db.Decimal(12, 2)
+  multichain_data_hex  String?
+  multichain_txid      String?
+  polygon_txhash       String?
+  created_at           DateTime @default(now()) @db.Timestamptz()
+
+  asset fixed_assets @relation(fields: [asset_id], references: [id], onDelete: Cascade)
+
+  @@unique([asset_id, period_year, period_month])
+  @@index([org_id, period_year, period_month])
+}
+
+model contractors {
+  id                  String   @id @default(uuid()) @db.Uuid
+  org_id              String   @db.Uuid
+  name                String
+  business_name       String?
+  ein_or_ssn          String?
+  address             String?
+  city                String?
+  state               String?
+  zip                 String?
+  email               String?
+  phone               String?
+  is_active           Boolean  @default(true)
+  multichain_data_hex String?
+  multichain_txid     String?
+  polygon_txhash      String?
+  created_at          DateTime @default(now()) @db.Timestamptz()
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz()
+
+  organization organizations @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  expenses     expenses[]
+
+  @@index([org_id])
+  @@index([org_id, is_active])
+}
+
+model tax_packages {
+  id                  String    @id @default(uuid()) @db.Uuid
+  org_id              String    @db.Uuid
+  tax_year            Int
+  package_type        String    @default("annual")
+  status              String    @default("generating") // generating, completed, failed
+  file_url            String?
+  file_size_bytes     BigInt?
+  generated_by        String?   @db.Uuid
+  generated_at        DateTime  @default(now()) @db.Timestamptz()
+  expires_at          DateTime? @db.Timestamptz()
+  contents            Json?     // list of included filenames
+  multichain_data_hex String?
+  multichain_txid     String?
+  polygon_txhash      String?
+
+  organization organizations @relation(fields: [org_id], references: [id], onDelete: Cascade)
+
+  @@index([org_id])
 }
 
 model invoices {
@@ -265,14 +384,19 @@ model payrolls {
 }
 
 model payroll_entries {
-  id                  String   @id @default(uuid()) @db.Uuid
-  payroll_id          String   @db.Uuid
-  employee_id         String   @db.Uuid
-  amount              Decimal  @db.Decimal(15, 2)
-  multichain_data_hex String?
-  multichain_txid     String?
-  polygon_txhash      String?
-  created_at          DateTime @default(now()) @db.Timestamptz()
+  id                     String   @id @default(uuid()) @db.Uuid
+  payroll_id              String   @db.Uuid
+  employee_id             String   @db.Uuid
+  amount                  Decimal  @db.Decimal(15, 2)
+  federal_withholding     Decimal? @db.Decimal(10, 2)
+  state_withholding       Decimal? @db.Decimal(10, 2)
+  social_security_tax     Decimal? @db.Decimal(10, 2)
+  medicare_tax            Decimal? @db.Decimal(10, 2)
+  state_unemployment_tax  Decimal? @db.Decimal(10, 2)
+  multichain_data_hex     String?
+  multichain_txid         String?
+  polygon_txhash          String?
+  created_at              DateTime @default(now()) @db.Timestamptz()
 
   payroll  payrolls  @relation(fields: [payroll_id], references: [id], onDelete: Cascade)
   employee employees @relation(fields: [employee_id], references: [id])
@@ -340,6 +464,77 @@ model audit_log {
   @@index([org_id, created_at(sort: Desc)])
 }
 
+model chart_of_accounts {
+  id                  String    @id @default(uuid()) @db.Uuid
+  org_id              String    @db.Uuid
+  account_code        String
+  account_name        String
+  account_type        String    // asset, liability, equity, revenue, expense, cogs
+  parent_account_id   String?   @db.Uuid
+  is_active           Boolean   @default(true)
+  description         String?
+  multichain_data_hex String?
+  multichain_txid     String?
+  polygon_txhash      String?
+  created_at          DateTime  @default(now()) @db.Timestamptz()
+  updated_at          DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  organization    organizations          @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  parent_account  chart_of_accounts?     @relation("AccountHierarchy", fields: [parent_account_id], references: [id])
+  child_accounts  chart_of_accounts[]    @relation("AccountHierarchy")
+  journal_lines   journal_entry_lines[]
+
+  @@unique([org_id, account_code])
+  @@index([org_id, is_active])
+}
+
+model journal_entries {
+  id                  String    @id @default(uuid()) @db.Uuid
+  org_id              String    @db.Uuid
+  entry_number        String
+  entry_date          DateTime  @db.Date
+  description         String?
+  reference_type      String?   // expense, invoice, payroll, depreciation, manual, opening_balance
+  reference_id        String?   @db.Uuid
+  status              String    @default("posted")   // draft, posted, voided
+  created_by          String?   @db.Uuid
+  voided_by           String?   @db.Uuid
+  voided_at           DateTime? @db.Timestamptz()
+  void_reason         String?
+  multichain_data_hex String?
+  multichain_txid     String?
+  polygon_txhash      String?
+  created_at          DateTime  @default(now()) @db.Timestamptz()
+  updated_at          DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  organization organizations        @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  lines         journal_entry_lines[]
+
+  @@unique([org_id, entry_number])
+  @@index([org_id, entry_date])
+  @@index([reference_type, reference_id])
+  @@index([org_id, status])
+}
+
+model journal_entry_lines {
+  id               String   @id @default(uuid()) @db.Uuid
+  journal_entry_id String   @db.Uuid
+  account_id       String?  @db.Uuid
+  account_code     String
+  account_name     String
+  debit_amount     Decimal  @default(0) @db.Decimal(15, 2)
+  credit_amount    Decimal  @default(0) @db.Decimal(15, 2)
+  line_number      Int
+  description      String?
+  created_at       DateTime @default(now()) @db.Timestamptz()
+
+  journal_entry journal_entries     @relation(fields: [journal_entry_id], references: [id], onDelete: Cascade)
+  account       chart_of_accounts?  @relation(fields: [account_id], references: [id])
+
+  @@index([journal_entry_id])
+  @@index([account_code])
+}
+
 model dxer_system_config {
   id         String   @id @default(uuid()) @db.Uuid
   key        String   @unique
@@ -375,4 +570,68 @@ model dxer_sequences {
   organization organizations @relation(fields: [org_id], references: [id], onDelete: Cascade)
 
   @@unique([org_id, seq_name])
+}
+
+model anomaly_detection_stats {
+  id             String   @id @default(uuid()) @db.Uuid
+  org_id         String   @db.Uuid
+  date           DateTime @db.Date
+  total_expenses Int      @default(0)
+  flagged_count  Int      @default(0)
+  flag_types     Json?    // {"duplicate": 5, "amount_spike": 2, ...}
+  created_at     DateTime @default(now()) @db.Timestamptz()
+
+  organization organizations @relation(fields: [org_id], references: [id], onDelete: Cascade)
+
+  @@unique([org_id, date])
+  @@index([org_id])
+}
+
+model accounting_periods {
+  id                    String    @id @default(uuid()) @db.Uuid
+  org_id                String    @db.Uuid
+  period_type           String    // 'month', 'quarter', 'year'
+  year                  Int
+  month                 Int?      // 1-12 for monthly
+  quarter               Int?      // 1-4 for quarterly
+  start_date            DateTime  @db.Date
+  end_date              DateTime  @db.Date
+  status                String    @default("open") // open, closing, closed, reopened
+  closed_by             String?   @db.Uuid
+  closed_at             DateTime? @db.Timestamptz()
+  reopened_by           String?   @db.Uuid
+  reopened_at           DateTime? @db.Timestamptz()
+  reopen_reason         String?
+  final_balances        Json?
+  multichain_data_hex   String?
+  multichain_txid       String?
+  polygon_txhash        String?
+  created_at            DateTime  @default(now()) @db.Timestamptz()
+  updated_at            DateTime  @default(now()) @updatedAt @db.Timestamptz()
+
+  organization   organizations        @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  period_checks  period_close_checks[]
+
+  @@unique([org_id, year, month, period_type])
+  @@index([org_id, status])
+}
+
+model period_close_checks {
+  id            String    @id @default(uuid()) @db.Uuid
+  period_id     String    @db.Uuid
+  check_type    String
+  status        String    // passed, failed, warning, waived
+  severity      String    // critical, high, medium, low
+  message       String
+  details       Json?
+  resolved_by   String?   @db.Uuid
+  resolved_at   DateTime? @db.Timestamptz()
+  waived_by     String?   @db.Uuid
+  waived_at     DateTime? @db.Timestamptz()
+  waived_reason String?
+  created_at    DateTime  @default(now()) @db.Timestamptz()
+
+  period accounting_periods @relation(fields: [period_id], references: [id], onDelete: Cascade)
+
+  @@index([period_id])
 }

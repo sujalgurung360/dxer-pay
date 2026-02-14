@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { useUiMode } from '@/lib/ui-mode';
 
 type OnboardingStatus = 'invited' | 'registered' | 'verified' | 'contract_signed' | 'completed';
 
@@ -69,6 +70,7 @@ const STATUS_CONFIG: Record<OnboardingStatus, { label: string; icon: React.React
 
 export default function HiringPage() {
   const { currentOrg } = useAuth();
+  const [uiMode] = useUiMode();
   const [pipeline, setPipeline] = useState<PipelineEmployee[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviting, setInviting] = useState(false);
@@ -447,75 +449,79 @@ export default function HiringPage() {
                       </div>
                     )}
 
-                    {/* Wallet address */}
-                    {emp.walletAddress ? (
-                      <div>
-                        <p className="text-xs text-gray-400 mb-1">Polygon Wallet Address</p>
-                        <div className="flex items-center gap-2">
-                          <code className="flex-1 truncate rounded-xl bg-white px-3 py-2 font-mono text-xs text-gray-600 border border-gray-200">
-                            {emp.walletAddress}
-                          </code>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              copyToClipboard(emp.walletAddress!, emp.id);
-                            }}
-                            className="rounded-lg p-2 text-gray-400 hover:text-purple-600 hover:bg-white transition-colors"
-                          >
-                            {copied === emp.id ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-                          </button>
-                          <a
-                            href={`https://amoy.polygonscan.com/address/${emp.walletAddress}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="rounded-lg p-2 text-gray-400 hover:text-purple-600 hover:bg-white transition-colors"
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
-                        </div>
-                      </div>
-                    ) : (
-                      isAdmin && emp.onboardingStatus !== 'invited' && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleGenerateWallet(emp.id);
-                          }}
-                          disabled={generatingWallet === emp.id}
-                          className="btn-secondary gap-1.5 text-sm"
-                        >
-                          {generatingWallet === emp.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Wallet className="h-3.5 w-3.5" />
-                          )}
-                          Generate Wallet
-                        </button>
-                      )
-                    )}
+                    {/* Wallet address (advanced mode only) */}
+                    {uiMode === 'advanced' && (
+                      <>
+                        {emp.walletAddress ? (
+                          <div>
+                            <p className="text-xs text-gray-400 mb-1">Polygon Wallet Address</p>
+                            <div className="flex items-center gap-2">
+                              <code className="flex-1 truncate rounded-xl bg-white px-3 py-2 font-mono text-xs text-gray-600 border border-gray-200">
+                                {emp.walletAddress}
+                              </code>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  copyToClipboard(emp.walletAddress!, emp.id);
+                                }}
+                                className="rounded-lg p-2 text-gray-400 hover:text-purple-600 hover:bg-white transition-colors"
+                              >
+                                {copied === emp.id ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                              </button>
+                              <a
+                                href={`https://amoy.polygonscan.com/address/${emp.walletAddress}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="rounded-lg p-2 text-gray-400 hover:text-purple-600 hover:bg-white transition-colors"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                              </a>
+                            </div>
+                          </div>
+                        ) : (
+                          isAdmin && emp.onboardingStatus !== 'invited' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleGenerateWallet(emp.id);
+                              }}
+                              disabled={generatingWallet === emp.id}
+                              className="btn-secondary gap-1.5 text-sm"
+                            >
+                              {generatingWallet === emp.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Wallet className="h-3.5 w-3.5" />
+                              )}
+                              Generate Wallet
+                            </button>
+                          )
+                        )}
 
-                    {/* Hire transaction on blockchain */}
-                    {emp.onboardingStatus === 'completed' && emp.polygonTxhash && (
-                      <div className="rounded-2xl bg-gradient-to-r from-emerald-50 to-purple-50 border border-emerald-200 p-3">
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <Shield className="h-3.5 w-3.5 text-emerald-600" />
-                          <span className="text-xs font-bold text-emerald-700">Hired — Blockchain Verified</span>
-                        </div>
-                        <p className="text-[11px] text-gray-500 mb-2">
-                          Employment recorded on-chain with org↔employee address linkage.
-                        </p>
-                        <a
-                          href={`https://amoy.polygonscan.com/tx/${emp.polygonTxhash}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-purple-600 border border-purple-200 hover:bg-purple-50 transition-colors"
-                        >
-                          View Hire TX
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      </div>
+                        {/* Hire transaction on blockchain */}
+                        {emp.onboardingStatus === 'completed' && emp.polygonTxhash && (
+                          <div className="rounded-2xl bg-gradient-to-r from-emerald-50 to-purple-50 border border-emerald-200 p-3">
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <Shield className="h-3.5 w-3.5 text-emerald-600" />
+                              <span className="text-xs font-bold text-emerald-700">Hired — Blockchain Verified</span>
+                            </div>
+                            <p className="text-[11px] text-gray-500 mb-2">
+                              Employment recorded on-chain with org↔employee address linkage.
+                            </p>
+                            <a
+                              href={`https://amoy.polygonscan.com/tx/${emp.polygonTxhash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-purple-600 border border-purple-200 hover:bg-purple-50 transition-colors"
+                            >
+                              View Hire TX
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </div>
+                        )}
+                      </>
                     )}
 
                     {/* Progress bar */}

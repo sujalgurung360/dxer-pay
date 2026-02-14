@@ -6,6 +6,7 @@ import { validateBody, validateQuery } from '../middleware/validate.js';
 import { NotFoundError, AppError } from '../lib/errors.js';
 import { writeAuditLog, getClientInfo } from '../services/audit.js';
 import { triggerAutoAnchor } from '../middleware/auto-anchor.js';
+import { createPayrollJournal } from '../services/auto-journal.js';
 import { Prisma } from '@prisma/client';
 
 export const payrollRoutes = Router();
@@ -191,10 +192,16 @@ payrollRoutes.post('/:id/complete', requireRole('admin'),
       if (!payroll) throw new NotFoundError('Payroll', req.params.id);
       if (payroll.status !== 'draft') throw new AppError(400, 'INVALID_STATUS', 'Payroll must be in draft status');
 
-      await prisma.payrolls.update({
+      const updated = await prisma.payrolls.update({
         where: { id: req.params.id },
         data: { status: 'completed' },
       });
+
+      try {
+        await createPayrollJournal(updated, authReq.userId);
+      } catch (err) {
+        console.error('Failed to create journal entry for payroll:', err);
+      }
 
       await writeAuditLog({
         orgId: authReq.orgId!,

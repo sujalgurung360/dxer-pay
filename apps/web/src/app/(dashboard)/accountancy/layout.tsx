@@ -1,8 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
+import { api } from '@/lib/api';
+import { Search, Loader2 } from 'lucide-react';
 
 const groups = [
   {
@@ -66,10 +69,56 @@ const groups = [
 
 export default function AccountancyLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [query, setQuery] = useState('');
+  const [queryResult, setQueryResult] = useState<any>(null);
+  const [queryLoading, setQueryLoading] = useState(false);
+
+  const handleQuery = async () => {
+    if (!query.trim()) return;
+    setQueryLoading(true);
+    setQueryResult(null);
+    try {
+      const res = (await api.accountancy.query(query.trim())) as any;
+      setQueryResult(res.data);
+    } catch (err: any) {
+      setQueryResult({ answer: err.message || 'Failed to run query' });
+    } finally {
+      setQueryLoading(false);
+    }
+  };
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[220px,minmax(0,1fr)]">
       <aside className="rounded-2xl border border-gray-100 bg-white/70 px-3 py-3 shadow-sm">
+        <div className="mb-3 border-b border-gray-100 pb-3">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Ask about your finances..."
+              className="w-full rounded-lg border border-gray-200 bg-surface-50 pl-8 pr-8 py-2 text-xs placeholder:text-gray-400 focus:border-purple-300 focus:outline-none focus:ring-1 focus:ring-purple-300"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleQuery()}
+            />
+            <button
+              type="button"
+              onClick={handleQuery}
+              disabled={queryLoading}
+              className="absolute right-2 top-1.5 text-purple-500 hover:text-purple-600 disabled:opacity-50"
+            >
+              {queryLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+          {queryResult && (
+            <div className="mt-2 rounded-lg border border-purple-100 bg-purple-50/50 p-2.5 text-xs text-gray-700">
+              <p>{queryResult.answer}</p>
+              {queryResult.data?.count != null && (
+                <p className="mt-1 text-gray-500">Based on {queryResult.data.count} transactions</p>
+              )}
+            </div>
+          )}
+        </div>
         <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
           Reports &amp; Documents
         </p>

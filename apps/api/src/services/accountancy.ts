@@ -170,8 +170,9 @@ export async function computeTrialBalanceForOrg(params: {
   from: Date;
   to: Date;
   basis: 'accrual' | 'cash';
-}): Promise<TrailBalanceResult> {
-  const lines = await buildJournalLinesForOrg(params);
+  usePersisted?: boolean;
+}): Promise<TrialBalanceResult> {
+  const lines = await getJournalLinesForPeriod(params);
   const accountMap = new Map<string, TrialBalanceAccountRow>();
 
   for (const line of lines) {
@@ -228,8 +229,9 @@ export async function computeProfitAndLossForOrg(params: {
   from: Date;
   to: Date;
   basis: 'accrual' | 'cash';
+  usePersisted?: boolean;
 }): Promise<ProfitAndLossResult> {
-  const lines = await buildJournalLinesForOrg(params);
+  const lines = await getJournalLinesForPeriod(params);
 
   const rowsMap = new Map<string, ProfitAndLossRow>();
 
@@ -295,8 +297,9 @@ export async function computeGeneralLedgerForOrg(params: {
   to: Date;
   basis: 'accrual' | 'cash';
   accountCode?: string;
+  usePersisted?: boolean;
 }): Promise<GeneralLedgerResult> {
-  const lines = await buildJournalLinesForOrg(params);
+  const lines = await getJournalLinesForPeriod(params);
   const filtered = params.accountCode
     ? lines.filter((l) => l.accountCode === params.accountCode)
     : lines;
@@ -480,7 +483,7 @@ export async function computeBurnRateForOrg(params: {
   from: Date;
   to: Date;
 }): Promise<BurnRateResult> {
-  const lines = await buildJournalLinesForOrg({
+  const lines = await getJournalLinesForPeriod({
     orgId: params.orgId,
     from: params.from,
     to: params.to,
@@ -516,7 +519,60 @@ export async function computeBurnRateForOrg(params: {
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
-// Journal builder – computed from existing DXER entities
+// Journal builder – persisted from journal_entries (preferred when available)
+// ───────────────────────────────────────────────────────────────────────────────
+
+async function buildJournalLinesFromPersisted(params: {
+  orgId: string;
+  from: Date;
+  to: Date;
+}): Promise<JournalLine[]> {
+  const entries = await (prisma as any).journal_entries?.findMany({
+    where: {
+      org_id: params.orgId,
+      status: 'posted',
+      entry_date: { gte: params.from, lte: params.to },
+    },
+    include: { lines: true },
+  }).catch(() => []);
+
+  const lines: JournalLine[] = [];
+  for (const entry of entries || []) {
+    for (const l of entry.lines || []) {
+      const debit = Number(l.debit_amount ?? 0);
+      const credit = Number(l.credit_amount ?? 0);
+      if (debit > 0 || credit > 0) {
+        lines.push({
+          date: entry.entry_date instanceof Date ? entry.entry_date : new Date(entry.entry_date),
+          accountCode: l.account_code,
+          debit,
+          credit,
+          description: l.description || entry.description || '',
+          sourceType: (entry.reference_type as 'expense' | 'invoice' | 'payroll') || 'expense',
+          sourceId: entry.reference_id || entry.id,
+        });
+      }
+    }
+  }
+  return lines;
+}
+
+async function getJournalLinesForPeriod(params: {
+  orgId: string;
+  from: Date;
+  to: Date;
+  basis: 'accrual' | 'cash';
+  usePersisted?: boolean;
+}): Promise<JournalLine[]> {
+  if (params.usePersisted === false) {
+    return buildJournalLinesForOrg(params);
+  }
+  const persisted = await buildJournalLinesFromPersisted(params);
+  return persisted.length > 0 ? persisted : buildJournalLinesForOrg(params);
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Journal builder – computed from existing DXER entities (fallback)
 // ───────────────────────────────────────────────────────────────────────────────
 
 async function buildJournalLinesForOrg(params: {

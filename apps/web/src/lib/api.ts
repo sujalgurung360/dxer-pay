@@ -106,18 +106,38 @@ export const api = {
     resolveAddress: (address: string) =>
       apiFetch(`/api/organizations/resolve-address/${encodeURIComponent(address)}`),
   },
+  ocr: {
+    receipt: (image: string) =>
+      apiFetch('/api/ocr/receipt', { method: 'POST', body: JSON.stringify({ image }) }),
+    categorize: (data: { merchant?: string; description?: string; amount?: number }) =>
+      apiFetch('/api/ocr/categorize', { method: 'POST', body: JSON.stringify(data) }),
+    uploadReceipt: (image: string) =>
+      apiFetch('/api/ocr/upload-receipt', { method: 'POST', body: JSON.stringify({ image }) }),
+  },
   expenses: {
     list: (params?: Record<string, string>) => {
       const qs = params ? '?' + new URLSearchParams(params).toString() : '';
       return apiFetch(`/api/expenses${qs}`);
     },
     get: (id: string) => apiFetch(`/api/expenses/${id}`),
-    create: (data: any) =>
+    create: (data: { description: string; amount: number; category: string; date: string; tags?: string[]; notes?: string; receiptUrl?: string; [k: string]: any }) =>
       apiFetch('/api/expenses', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) =>
       apiFetch(`/api/expenses/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     void: (id: string) =>
       apiFetch(`/api/expenses/${id}/void`, { method: 'POST' }),
+    markReviewed: (id: string) =>
+      apiFetch(`/api/expenses/${id}/mark-reviewed`, { method: 'POST' }),
+    convertToAsset: (id: string, usefulLife: number, category?: string) =>
+      apiFetch(`/api/expenses/${id}/convert-to-asset`, {
+        method: 'POST',
+        body: JSON.stringify({ usefulLife, category }),
+      }),
+    fixAmount: (id: string, newAmount: number) =>
+      apiFetch(`/api/expenses/${id}/fix-amount`, {
+        method: 'POST',
+        body: JSON.stringify({ newAmount }),
+      }),
     exportCsv: () => apiFetch('/api/expenses/export'),
   },
   invoices: {
@@ -253,6 +273,34 @@ export const api = {
       const search = new URLSearchParams({ asOf }).toString();
       return apiFetch('/api/accountancy/ap-aging?' + search);
     },
+    query: (question: string) =>
+      apiFetch('/api/accountancy/query', {
+        method: 'POST',
+        body: JSON.stringify({ question }),
+      }),
+    monthEndCheck: (year: number, month: number) =>
+      apiFetch('/api/accountancy/month-end-check', {
+        method: 'POST',
+        body: JSON.stringify({ year, month }),
+      }),
+    closePeriod: (year: number, month: number, force?: boolean) =>
+      apiFetch('/api/accountancy/close-period', {
+        method: 'POST',
+        body: JSON.stringify({ year, month, force }),
+      }),
+    reopenPeriod: (year: number, month: number, reason: string) =>
+      apiFetch('/api/accountancy/reopen-period', {
+        method: 'POST',
+        body: JSON.stringify({ year, month, reason }),
+      }),
+    periodStatus: (year: number, month: number) => {
+      const qs = new URLSearchParams({ year: String(year), month: String(month) }).toString();
+      return apiFetch(`/api/accountancy/period-status?${qs}`);
+    },
+    periodHistory: (year: number, month: number) => {
+      const qs = new URLSearchParams({ year: String(year), month: String(month) }).toString();
+      return apiFetch(`/api/accountancy/period-history?${qs}`);
+    },
     burnRate: (params: { from: string; to: string }) => {
       const search = new URLSearchParams({
         from: params.from,
@@ -260,5 +308,37 @@ export const api = {
       }).toString();
       return apiFetch('/api/accountancy/burn-rate?' + search);
     },
+  },
+  tax: {
+    w2: (year: number) =>
+      apiFetch(`/api/tax/w2?year=${year}`),
+    w2Employee: (employeeId: string, year: number) =>
+      apiFetch(`/api/tax/w2/${encodeURIComponent(employeeId)}?year=${year}`),
+    form1099NEC: (year: number) =>
+      apiFetch(`/api/tax/1099-nec?year=${year}`),
+    form1120: (year: number) =>
+      apiFetch(`/api/tax/1120?year=${year}`),
+    depreciationSchedule: (year: number) =>
+      apiFetch(`/api/tax/depreciation-schedule?year=${year}`),
+    generatePackage: (year: number) =>
+      apiFetch('/api/tax/generate-package', {
+        method: 'POST',
+        body: JSON.stringify({ year }),
+      }),
+    packages: () => apiFetch('/api/tax/packages'),
+  },
+  journalEntries: {
+    list: (params?: { startDate?: string; endDate?: string; accountCode?: string; referenceType?: string; status?: string }) => {
+      const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : '';
+      return apiFetch(`/api/journal-entries${qs}`);
+    },
+    get: (id: string) => apiFetch(`/api/journal-entries/${encodeURIComponent(id)}`),
+    create: (data: { entryDate: string; description: string; lines: { accountCode: string; debitAmount?: number; creditAmount?: number; description?: string }[] }) =>
+      apiFetch('/api/journal-entries', { method: 'POST', body: JSON.stringify(data) }),
+    void: (id: string, reason: string) =>
+      apiFetch(`/api/journal-entries/${encodeURIComponent(id)}/void`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
   },
 };

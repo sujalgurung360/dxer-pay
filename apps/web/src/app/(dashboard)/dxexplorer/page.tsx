@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Search, Shield, ShieldCheck, ShieldX, ArrowRight,
   ExternalLink, Hash, Database, Globe, CheckCircle2,
@@ -9,6 +9,7 @@ import {
   Fingerprint, Link2, Server, HardDrive, AlertTriangle,
   Building2, ArrowLeftRight,
 } from 'lucide-react';
+import { useUiMode } from '@/lib/ui-mode';
 import { api } from '@/lib/api';
 
 type ResolvedAddress = {
@@ -64,8 +65,16 @@ type LookupResult = {
 type SearchMode = 'verify' | 'lookup';
 
 export default function DXExplorerPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const [uiMode] = useUiMode();
   const [searchMode, setSearchMode] = useState<SearchMode>('verify');
+
+  useEffect(() => {
+    if (uiMode === 'simple') {
+      router.replace('/dashboard');
+    }
+  }, [uiMode, router]);
   const [identifier, setIdentifier] = useState('');
   const [entityType, setEntityType] = useState('');
   const [entityId, setEntityId] = useState('');

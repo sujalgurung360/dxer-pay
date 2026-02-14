@@ -16,6 +16,9 @@ import { productionEventRoutes } from './routes/production-events.js';
 import { auditRoutes } from './routes/audit-log.js';
 import { anchorRoutes } from './routes/anchoring.js';
 import { accountancyRoutes } from './routes/accountancy.js';
+import { ocrRoutes } from './routes/ocr.js';
+import { taxFormsRoutes } from './routes/tax-forms.js';
+import { journalEntryRoutes } from './routes/journal-entries.js';
 import { onboardingRoutes } from './routes/onboarding.js';
 import { hiringRoutes } from './routes/hiring.js';
 import { healthRoutes } from './routes/health.js';
@@ -79,6 +82,9 @@ app.use('/api/anchoring', anchorRoutes);
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/hiring', hiringRoutes);
 app.use('/api/accountancy', accountancyRoutes);
+app.use('/api/tax', taxFormsRoutes);
+app.use('/api/journal-entries', journalEntryRoutes);
+app.use('/api/ocr', ocrRoutes);
 
 // ─── Error Handler ───────────────────────────────
 app.use(errorHandler);

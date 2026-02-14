@@ -9,10 +9,12 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { AnchorBadge } from '@/components/ui/anchor-badge';
 import { Modal } from '@/components/ui/modal';
 import { formatCurrency, formatDate } from '@dxer/shared';
+import { useUiMode } from '@/lib/ui-mode';
 import { Plus, Download, CheckCircle } from 'lucide-react';
 
 export default function PayrollPage() {
   const { currentOrg } = useAuth();
+  const [uiMode] = useUiMode();
   const [data, setData] = useState<any[]>([]);
   const [pagination, setPagination] = useState<any>(null);
   const [page, setPage] = useState(1);
@@ -82,7 +84,9 @@ export default function PayrollPage() {
     { key: 'totalAmount', header: 'Total', className: 'text-right', render: (row: any) => formatCurrency(row.totalAmount) },
     { key: 'entryCount', header: 'Employees', className: 'text-right' },
     { key: 'status', header: 'Status', render: (row: any) => <StatusBadge status={row.status} /> },
-    { key: 'anchor', header: 'Proof', render: (row: any) => <AnchorBadge polygonTxHash={row.polygonTxhash} multichainTxId={row.multichainTxid} entityType="payroll" entityId={row.id} showLabel /> },
+    ...(uiMode === 'advanced'
+      ? [{ key: 'anchor', header: 'Proof', render: (row: any) => <AnchorBadge polygonTxHash={row.polygonTxhash} multichainTxId={row.multichainTxid} entityType="payroll" entityId={row.id} showLabel /> }]
+      : []),
   ];
 
   return (

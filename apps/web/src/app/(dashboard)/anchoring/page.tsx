@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { useUiMode } from '@/lib/ui-mode';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/page-header';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -19,7 +21,9 @@ const ENTITY_TYPES = [
 ];
 
 export default function AnchoringPage() {
+  const router = useRouter();
   const { currentOrg } = useAuth();
+  const [uiMode] = useUiMode();
   const [entityType, setEntityType] = useState('expense');
   const [records, setRecords] = useState<any[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -29,11 +33,18 @@ export default function AnchoringPage() {
   const [result, setResult] = useState<any>(null);
 
   useEffect(() => {
-    if (currentOrg) {
+    if (uiMode === 'simple') {
+      router.replace('/dashboard');
+      return;
+    }
+  }, [uiMode, router]);
+
+  useEffect(() => {
+    if (currentOrg && uiMode === 'advanced') {
       loadRecords();
       loadJobs();
     }
-  }, [currentOrg, entityType]);
+  }, [currentOrg, entityType, uiMode]);
 
   async function loadRecords() {
     setLoading(true);
