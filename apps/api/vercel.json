@@ -1,4 +1,5 @@
 {
   "buildCommand": "cd ../.. && npx turbo run build --filter=@dxer/api",
-  "installCommand": "cd ../.. && npm install"
+  "installCommand": "cd ../.. && npm install",
+  "rewrites": [{ "source": "/(.*)", "destination": "/api" }]
 }
