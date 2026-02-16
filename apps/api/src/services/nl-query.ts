@@ -186,7 +186,7 @@ Write a natural, conversational response (2-3 sentences).`,
     return {
       answer,
       data: { total, count },
-      params: { from, to, category: parsed.category || undefined },
+      params: { from, to, category: parsed.category ?? '' },
     };
   } catch (err) {
     return {

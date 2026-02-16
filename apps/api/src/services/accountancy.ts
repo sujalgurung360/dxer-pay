@@ -367,7 +367,7 @@ export async function computeArAgingForOrg(orgId: string, asOf: Date): Promise<A
     );
 
     const bucket = bucketize(daysPastDue);
-    row[bucket as keyof AgingRow] += amount;
+    (row as unknown as Record<string, number>)[bucket as string] = ((row as unknown as Record<string, number>)[bucket as string] ?? 0) + amount;
     row.total += amount;
     rowsMap.set(key, row);
   }
@@ -441,7 +441,7 @@ export async function computeApAgingForOrg(orgId: string, asOf: Date): Promise<A
     );
 
     const bucket = bucketize(daysPast);
-    row[bucket as keyof AgingRow] += amount;
+    (row as unknown as Record<string, number>)[bucket as string] = ((row as unknown as Record<string, number>)[bucket as string] ?? 0) + amount;
     row.total += amount;
     rowsMap.set(key, row);
   }

@@ -66,12 +66,13 @@ invoiceRoutes.get('/:id', requireRole('viewer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
       const invoice = await prisma.invoices.findFirst({
-        where: { id: req.params.id, org_id: authReq.orgId! },
+        where: { id, org_id: authReq.orgId! },
         include: { customer: true, line_items: true },
       });
 
-      if (!invoice) throw new NotFoundError('Invoice', req.params.id);
+      if (!invoice) throw new NotFoundError('Invoice', id);
 
       res.json({
         success: true,
@@ -118,12 +119,13 @@ invoiceRoutes.get('/:id/pdf', requireRole('viewer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
       const invoice = await prisma.invoices.findFirst({
-        where: { id: req.params.id, org_id: authReq.orgId! },
+        where: { id, org_id: authReq.orgId! },
         include: { customer: true, line_items: true },
       });
 
-      if (!invoice) throw new NotFoundError('Invoice', req.params.id);
+      if (!invoice) throw new NotFoundError('Invoice', id);
 
       const org = await prisma.organizations.findUnique({ where: { id: authReq.orgId! } });
 
@@ -238,6 +240,7 @@ invoiceRoutes.post('/:id/status', requireRole('accountant'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
       const { status } = req.body;
 
       const validTransitions: Record<string, string[]> = {
@@ -248,17 +251,17 @@ invoiceRoutes.post('/:id/status', requireRole('accountant'),
       };
 
       const invoice = await prisma.invoices.findFirst({
-        where: { id: req.params.id, org_id: authReq.orgId! },
+        where: { id, org_id: authReq.orgId! },
       });
 
-      if (!invoice) throw new NotFoundError('Invoice', req.params.id);
+      if (!invoice) throw new NotFoundError('Invoice', id);
 
       if (!validTransitions[invoice.status]?.includes(status)) {
         throw new AppError(400, 'INVALID_TRANSITION', `Cannot transition from ${invoice.status} to ${status}`);
       }
 
       const updated = await prisma.invoices.update({
-        where: { id: req.params.id },
+        where: { id },
         data: { status },
         include: { line_items: true },
       });
@@ -279,15 +282,15 @@ invoiceRoutes.post('/:id/status', requireRole('accountant'),
         userId: authReq.userId,
         action: 'status_change',
         entityType: 'invoice',
-        entityId: req.params.id,
+        entityId: id,
         before: { status: invoice.status },
         after: { status },
         ...getClientInfo(req),
       });
 
-      triggerAutoAnchor({ entityType: 'invoice', entityId: req.params.id, orgId: authReq.orgId!, userId: authReq.userId, action: 'status_change' });
+      triggerAutoAnchor({ entityType: 'invoice', entityId: id, orgId: authReq.orgId!, userId: authReq.userId, action: 'status_change' });
 
-      res.json({ success: true, data: { id: req.params.id, status } });
+      res.json({ success: true, data: { id, status } });
     } catch (err) { next(err); }
   }
 );

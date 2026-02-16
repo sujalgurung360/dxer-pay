@@ -86,7 +86,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const accessToken = res.data.accessToken;
     localStorage.setItem('dxer_token', accessToken);
     setToken(accessToken);
-    await refreshUser();
+    try {
+      await refreshUser();
+    } catch (err) {
+      localStorage.removeItem('dxer_token');
+      localStorage.removeItem('dxer_org_id');
+      setToken(null);
+      setUser(null);
+      setOrgs([]);
+      throw err;
+    }
   };
 
   const signUp = async (data: any) => {

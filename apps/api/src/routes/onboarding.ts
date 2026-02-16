@@ -1,13 +1,13 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { ethers } from 'ethers';
-import { supabaseAdmin } from '../lib/supabase.js';
+import { getSupabaseAdmin } from '../lib/supabase.js';
 import { prisma } from '../lib/prisma.js';
 import { AppError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import { triggerAutoAnchor } from '../middleware/auto-anchor.js';
 import { encryptPrivateKey, decryptPrivateKey } from '../lib/wallet-crypto.js';
 import { recordHireOnChain } from '../lib/hiring-contract.js';
-import { writeAuditLog } from '../services/audit.js';
+import { writeAuditLog, getClientInfo } from '../services/audit.js';
 
 export const onboardingRoutes = Router();
 
@@ -74,7 +74,7 @@ onboardingRoutes.post('/register', async (req: Request, res: Response, next: Nex
     }
 
     // Create a Supabase user for the employee
-    const { data: newUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    const { data: newUser, error: authError } = await getSupabaseAdmin().auth.admin.createUser({
       email: employee.email,
       password,
       email_confirm: true,
@@ -281,8 +281,7 @@ onboardingRoutes.post('/complete', async (req: Request, res: Response, next: Nex
             fundTxHash: hireOnChainResult.fundTxHash,
             blockNumber: hireOnChainResult.blockNumber,
           },
-          ip_address: req.ip || null,
-          user_agent: req.get('user-agent') || null,
+          ...getClientInfo(req),
         });
 
         logger.info({

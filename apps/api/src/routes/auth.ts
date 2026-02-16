@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { ethers } from 'ethers';
 import { signUpSchema, signInSchema } from '@dxer/shared';
-import { supabaseAdmin } from '../lib/supabase.js';
+import { getSupabaseAdmin } from '../lib/supabase.js';
 import { prisma } from '../lib/prisma.js';
 import { validateBody } from '../middleware/validate.js';
 import { authenticate, AuthenticatedRequest } from '../middleware/auth.js';
@@ -39,12 +39,17 @@ authRoutes.post('/signup', async (req: Request, res: Response, next: NextFunctio
     if (!email || !password || !fullName) {
       throw new AppError(400, 'VALIDATION_ERROR', 'Email, password, and full name are required');
     }
-    if (password.length < 8) {
-      throw new AppError(400, 'VALIDATION_ERROR', 'Password must be at least 8 characters');
+    if (password.length < 12) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'Password must be at least 12 characters');
+    }
+
+    // Basic email format validation
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'Invalid email address format');
     }
 
     // 1. Create the user in Supabase Auth
-    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    const { data, error } = await getSupabaseAdmin().auth.admin.createUser({
       email,
       password,
       email_confirm: true,
@@ -81,33 +86,36 @@ authRoutes.post('/signup', async (req: Request, res: Response, next: NextFunctio
     if (orgName) {
       const slug = orgSlug || orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-      // Check slug uniqueness
-      const existing = await prisma.organizations.findUnique({ where: { slug } });
-      if (existing) {
-        throw new AppError(409, 'CONFLICT', 'Organization slug already taken. Try a different name.');
-      }
-
       // Generate a Polygon wallet for this organization
       const wallet = generateOrgWallet();
 
-      const org = await prisma.organizations.create({
-        data: {
-          name: orgName,
-          slug,
-          owner_id: userId,
-          registration_number: registrationNumber || null,
-          business_type: businessType || null,
-          country: country || null,
-          wallet_address: wallet.address,
-          wallet_private_key_enc: wallet.encryptedPrivateKey,
-          members: {
-            create: {
-              user_id: userId,
-              role: 'owner',
+      // Use try/catch to handle slug uniqueness race condition atomically
+      let org;
+      try {
+        org = await prisma.organizations.create({
+          data: {
+            name: orgName,
+            slug,
+            owner_id: userId,
+            registration_number: registrationNumber || null,
+            business_type: businessType || null,
+            country: country || null,
+            wallet_address: wallet.address,
+            wallet_private_key_enc: wallet.encryptedPrivateKey,
+            members: {
+              create: {
+                user_id: userId,
+                role: 'owner',
+              },
             },
           },
-        },
-      });
+        });
+      } catch (err: any) {
+        if (err.code === 'P2002') {
+          throw new AppError(409, 'CONFLICT', 'Organization slug already taken. Try a different name.');
+        }
+        throw err;
+      }
 
       orgData = {
         id: org.id,
@@ -123,7 +131,6 @@ authRoutes.post('/signup', async (req: Request, res: Response, next: NextFunctio
       }, 'Organization created with Polygon wallet');
 
       // Auto-fund the new org wallet with a small amount of POL for gas fees
-      // This runs in the background — don't block signup on it
       fundOrgWallet(wallet.address).then((funding) => {
         if (funding) {
           logger.info({
@@ -158,7 +165,7 @@ authRoutes.post('/signin', validateBody(signInSchema), async (req: Request, res:
   try {
     const { email, password } = req.body;
 
-    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+    const { data, error } = await getSupabaseAdmin().auth.signInWithPassword({
       email,
       password,
     });
@@ -166,6 +173,24 @@ authRoutes.post('/signin', validateBody(signInSchema), async (req: Request, res:
     if (error) {
       throw new AppError(401, 'AUTH_ERROR', 'Invalid email or password');
     }
+
+    // Also set a cookie so Next middleware can allow /dashboard immediately.
+    const host = String(req.headers.host || '');
+    const isOnedollar = host === 'onedollarpage.com' || host.endsWith('.onedollarpage.com');
+    const isNepalEthereum = host === 'nepalethereum.cor' || host.endsWith('.nepalethereum.cor');
+    const isHttps = String(req.headers['x-forwarded-proto'] || '').includes('https') || process.env.NODE_ENV === 'production';
+    let cookieDomain = '';
+    if (isOnedollar) cookieDomain = '.onedollarpage.com';
+    else if (isNepalEthereum) cookieDomain = '.nepalethereum.cor';
+    const cookieParts = [
+      `dxer_token=${encodeURIComponent(data.session.access_token)}`,
+      'Path=/',
+      `Max-Age=${60 * 60 * 24 * 7}`,
+      'SameSite=Lax',
+      isHttps ? 'Secure' : '',
+      cookieDomain ? `Domain=${cookieDomain}` : '',
+    ].filter(Boolean);
+    res.setHeader('Set-Cookie', cookieParts.join('; '));
 
     res.json({
       success: true,
@@ -195,10 +220,21 @@ authRoutes.get('/me', authenticate, async (req: Request, res: Response, next: Ne
       throw new AppError(404, 'NOT_FOUND', 'Profile not found');
     }
 
-    // Get user's organizations (include wallet address)
     const memberships = await prisma.organization_members.findMany({
       where: { user_id: authReq.userId },
-      include: { organization: true },
+      include: {
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            wallet_address: true,
+            metamask_address: true,
+            registration_number: true,
+            business_type: true,
+          },
+        },
+      },
     });
 
     res.json({
@@ -225,6 +261,67 @@ authRoutes.get('/me', authenticate, async (req: Request, res: Response, next: Ne
           businessType: m.organization.business_type,
         })),
       },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/auth/forgot-password
+// Sends a password reset email via Supabase. Always returns success to avoid revealing whether an email exists.
+authRoutes.post('/forgot-password', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'Email is required');
+    }
+
+    await getSupabaseAdmin().auth.resetPasswordForEmail(email).catch(() => {});
+
+    logger.info({ email }, 'Password reset requested');
+
+    res.json({
+      success: true,
+      message: 'If an account with that email exists, a password reset link has been sent.',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/auth/reset-password
+authRoutes.post('/reset-password', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { accessToken, newPassword } = req.body;
+
+    if (!accessToken || !newPassword) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'Access token and new password are required');
+    }
+
+    if (newPassword.length < 12) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'Password must be at least 12 characters');
+    }
+
+    const { data: { user }, error: userError } = await getSupabaseAdmin().auth.getUser(accessToken);
+
+    if (userError || !user) {
+      throw new AppError(401, 'AUTH_ERROR', 'Invalid or expired reset token');
+    }
+
+    const { error: updateError } = await getSupabaseAdmin().auth.admin.updateUserById(user.id, {
+      password: newPassword,
+    });
+
+    if (updateError) {
+      throw new AppError(500, 'AUTH_ERROR', 'Failed to update password');
+    }
+
+    logger.info({ userId: user.id }, 'Password reset completed');
+
+    res.json({
+      success: true,
+      message: 'Password has been reset successfully.',
     });
   } catch (err) {
     next(err);

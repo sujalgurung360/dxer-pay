@@ -76,15 +76,15 @@ export async function runMonthEndChecks(
   });
 
   // Check 2: Large expenses (might be assets)
-  const largeExpenses = await prisma.expenses.findMany({
+  const largeExpensesRaw = await prisma.expenses.findMany({
     where: {
       org_id: orgId,
       date: { gte: startOfMonth, lte: endOfMonth },
       amount: { gt: 1000 },
       status: { not: 'voided' },
-      tags: { not: { has: 'reviewed:asset' } },
     },
   });
+  const largeExpenses = largeExpensesRaw.filter((e) => !e.tags?.includes('reviewed:asset'));
 
   if (largeExpenses.length > 0) {
     const aiReviews = await Promise.all(

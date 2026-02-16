@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { createOrgSchema, updateOrgSchema, inviteMemberSchema, updateMemberRoleSchema } from '@dxer/shared';
 import { prisma } from '../lib/prisma.js';
-import { supabaseAdmin } from '../lib/supabase.js';
+import { getSupabaseAdmin } from '../lib/supabase.js';
 import { authenticate, resolveOrg, requireRole, AuthenticatedRequest } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
 import { NotFoundError, ConflictError, ForbiddenError } from '../lib/errors.js';
@@ -153,7 +153,7 @@ orgRoutes.post('/invite', resolveOrg, requireRole('admin'), validateBody(inviteM
         targetUserId = existingProfile.user_id;
       } else {
         // Create a Supabase user with a random password (they'll need to reset)
-        const { data: newUser, error } = await supabaseAdmin.auth.admin.createUser({
+        const { data: newUser, error } = await getSupabaseAdmin().auth.admin.createUser({
           email,
           email_confirm: true,
           user_metadata: { full_name: email.split('@')[0] },
@@ -217,7 +217,7 @@ orgRoutes.patch('/members/:memberId/role', resolveOrg, requireRole('admin'), val
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
-      const { memberId } = req.params;
+      const memberId = Array.isArray(req.params.memberId) ? req.params.memberId[0] : req.params.memberId ?? '';
       const { role } = req.body;
 
       const member = await prisma.organization_members.findFirst({
@@ -330,7 +330,7 @@ orgRoutes.get('/wallet', resolveOrg, requireRole('viewer'),
 orgRoutes.get('/resolve-address/:address', resolveOrg, requireRole('viewer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { address } = req.params;
+      const address = Array.isArray(req.params.address) ? req.params.address[0] : req.params.address ?? '';
 
       const org = await prisma.organizations.findFirst({
         where: {

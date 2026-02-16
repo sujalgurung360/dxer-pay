@@ -73,13 +73,14 @@ customerRoutes.put('/:id', requireRole('accountant'), validateBody(updateCustome
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
       const existing = await prisma.customers.findFirst({
-        where: { id: req.params.id, org_id: authReq.orgId! },
+        where: { id, org_id: authReq.orgId! },
       });
-      if (!existing) throw new NotFoundError('Customer', req.params.id);
+      if (!existing) throw new NotFoundError('Customer', id);
 
       const updated = await prisma.customers.update({
-        where: { id: req.params.id },
+        where: { id },
         data: req.body,
       });
       await writeAuditLog({

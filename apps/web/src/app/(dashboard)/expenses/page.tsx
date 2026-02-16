@@ -68,6 +68,7 @@ export default function ExpensesPage() {
   const loadExpenses = useCallback(async () => {
     if (!currentOrg) return;
     setLoading(true);
+    setError('');
     try {
       const params: Record<string, string> = { page: String(page), pageSize: '20' };
       if (search) params.search = search;
@@ -75,8 +76,12 @@ export default function ExpensesPage() {
       const res = await api.expenses.list(params);
       setData(res.data);
       setPagination(res.pagination);
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : 'Failed to load expenses');
+    } finally {
+      setLoading(false);
+    }
   }, [currentOrg, page, search, filter]);
 
   useEffect(() => { loadExpenses(); }, [loadExpenses]);
@@ -423,8 +428,7 @@ export default function ExpensesPage() {
                           type="button"
                           onClick={() => handleConvertToAsset(
                             showDetail.id,
-                            flag.autoFix.usefulLife,
-                            flag.autoFix?.category
+                            flag.autoFix.usefulLife
                           )}
                           className="btn-primary text-xs"
                         >

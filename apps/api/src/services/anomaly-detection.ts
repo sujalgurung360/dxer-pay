@@ -429,3 +429,20 @@ export async function detectAnomalies(expense: ExpenseInput): Promise<AnomalyFla
 
   return anomalies;
 }
+
+/**
+ * Check if an expense might be a capital asset (for month-end checks).
+ */
+export async function checkIfAsset(input: { description: string; amount: number }): Promise<{ isAsset: boolean; reasoning: string }> {
+  const expense: ExpenseInput = {
+    description: input.description,
+    amount: input.amount,
+    date: new Date(),
+    orgId: '',
+  };
+  const flag = checkIfAssetRuleBased(expense);
+  return {
+    isAsset: !!flag,
+    reasoning: flag?.suggestion ?? '',
+  };
+}

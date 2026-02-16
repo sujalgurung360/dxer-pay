@@ -170,7 +170,7 @@ hiringRoutes.post('/:id/generate-wallet', requireRole('admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
-      const employeeId = req.params.id;
+      const employeeId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
 
       const employee = await prisma.employees.findFirst({
         where: { id: employeeId, org_id: authReq.orgId! },

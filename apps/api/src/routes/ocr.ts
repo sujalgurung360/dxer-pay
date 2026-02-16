@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate, resolveOrg, requireRole, AuthenticatedRequest } from '../middleware/auth.js';
 import { extractReceiptFromImage, categorizeExpense } from '../services/ocr.js';
-import { supabaseAdmin } from '../lib/supabase.js';
+import { getSupabaseAdmin } from '../lib/supabase.js';
 import { AppError } from '../lib/errors.js';
 import { randomUUID } from 'crypto';
 
@@ -95,7 +95,7 @@ ocrRoutes.post('/upload-receipt', requireRole('viewer'), async (req: Request, re
     const ext = image.includes('png') ? 'png' : 'jpg';
     const filename = `${authReq.orgId}/${randomUUID()}.${ext}`;
 
-    const { error } = await supabaseAdmin.storage
+    const { error } = await getSupabaseAdmin().storage
       .from('receipts')
       .upload(filename, buffer, { contentType: `image/${ext}`, upsert: false });
 
@@ -103,7 +103,7 @@ ocrRoutes.post('/upload-receipt', requireRole('viewer'), async (req: Request, re
       throw new AppError(500, 'UPLOAD_FAILED', error.message);
     }
 
-    const { data: signed } = await supabaseAdmin.storage
+    const { data: signed } = await getSupabaseAdmin().storage
       .from('receipts')
       .createSignedUrl(filename, 60 * 60 * 24 * 365); // 1 year
 

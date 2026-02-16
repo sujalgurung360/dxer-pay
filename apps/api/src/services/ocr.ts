@@ -104,6 +104,7 @@ export async function extractReceiptFromImage(imageBase64: string): Promise<Rece
   if (match) jsonStr = match[1];
   const parsed = JSON.parse(jsonStr) as {
     merchant_name?: string;
+    merchant?: string;
     total_amount?: number;
     date?: string;
     line_items?: { description: string; amount: number }[];

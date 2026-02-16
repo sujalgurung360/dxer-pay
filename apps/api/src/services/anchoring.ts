@@ -359,6 +359,7 @@ export async function dxExplorerVerify(
       multichainTxid: null,
       multichainConfirmations: null,
       polygonConfirmations: null,
+      recoveredFromBlockchain: false,
       error: 'Transaction not found on Polygon. The hash may be invalid, or the transaction has not been confirmed yet.',
     };
   }

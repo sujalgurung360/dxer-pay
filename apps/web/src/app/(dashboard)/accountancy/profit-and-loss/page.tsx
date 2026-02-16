@@ -34,6 +34,8 @@ interface ProfitAndLossResponse {
       expenses: number;
       netIncome: number;
     };
+    summary?: string;
+    insights?: { type: string; message: string; action?: string }[];
   };
 }
 

@@ -15,23 +15,32 @@ export interface AuthenticatedRequest extends Request {
 }
 
 // ─── JWKS client for hosted Supabase (ES256 tokens) ───────────────
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-let jwksClient: jwksRsa.JwksClient | null = null;
+// Lazy-initialised so env vars are read at request time, not module-load time
+// (webpack inlines / drops NEXT_PUBLIC_ values during the build).
+let _jwksClient: jwksRsa.JwksClient | null | undefined;
 
-if (supabaseUrl && !supabaseUrl.includes('localhost')) {
-  jwksClient = jwksRsa({
-    jwksUri: `${supabaseUrl}/auth/v1/.well-known/jwks.json`,
-    cache: true,
-    cacheMaxAge: 600_000, // 10 min
-    rateLimit: true,
-  });
-  logger.info('Auth: using JWKS verification for hosted Supabase');
+function getJwksClient(): jwksRsa.JwksClient | null {
+  if (_jwksClient !== undefined) return _jwksClient;
+  const url = process.env['NEXT_PUBLIC_SUPABASE_URL'];
+  if (url && !url.includes('localhost')) {
+    _jwksClient = jwksRsa({
+      jwksUri: `${url}/auth/v1/.well-known/jwks.json`,
+      cache: true,
+      cacheMaxAge: 600_000, // 10 min
+      rateLimit: true,
+    });
+    logger.info('Auth: using JWKS verification for hosted Supabase');
+  } else {
+    _jwksClient = null;
+  }
+  return _jwksClient;
 }
 
 function getJwksSigningKey(kid: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    if (!jwksClient) return reject(new Error('No JWKS client'));
-    jwksClient.getSigningKey(kid, (err, key) => {
+    const client = getJwksClient();
+    if (!client) return reject(new Error('No JWKS client'));
+    client.getSigningKey(kid, (err, key) => {
       if (err) return reject(err);
       resolve(key!.getPublicKey());
     });
@@ -56,7 +65,7 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
 
     let decoded: { sub: string; email: string; role: string };
 
-    if (header?.alg === 'ES256' && header.kid && jwksClient) {
+    if (header?.alg === 'ES256' && header.kid && getJwksClient()) {
       // ─── Hosted Supabase: verify with JWKS public key ───
       const publicKey = await getJwksSigningKey(header.kid);
       decoded = jwt.verify(token, publicKey, { algorithms: ['ES256'] }) as any;

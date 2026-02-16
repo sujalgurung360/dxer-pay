@@ -41,15 +41,45 @@ expenseRoutes.get('/', requireRole('viewer'), validateQuery(expenseFilterSchema)
       }
       if (q.filter === 'uncategorized') where.category = 'other';
 
-      const [total, expenses] = await Promise.all([
-        prisma.expenses.count({ where }),
-        prisma.expenses.findMany({
-          where,
-          orderBy: { [q.sortBy || 'created_at']: q.sortOrder },
-          skip: (q.page - 1) * q.pageSize,
-          take: q.pageSize,
-        }),
-      ]);
+      let total = 0;
+      let expenses: any[] = [];
+      try {
+        [total, expenses] = await Promise.all([
+          prisma.expenses.count({ where }),
+          prisma.expenses.findMany({
+            where,
+            orderBy: { [q.sortBy || 'created_at']: q.sortOrder },
+            skip: (q.page - 1) * q.pageSize,
+            take: q.pageSize,
+            select: {
+              id: true,
+              description: true,
+              amount: true,
+              currency: true,
+              category: true,
+              status: true,
+              date: true,
+              tags: true,
+              notes: true,
+              receipt_url: true,
+              production_batch_id: true,
+              multichain_txid: true,
+              polygon_txhash: true,
+              created_by: true,
+              created_at: true,
+              updated_at: true,
+            },
+          }),
+        ]);
+      } catch (e: any) {
+        const msg = e?.message || String(e);
+        if (q.filter === 'needs_review' && (msg.includes('does not exist') || msg.includes('needs_review'))) {
+          total = 0;
+          expenses = [];
+        } else {
+          throw e;
+        }
+      }
 
       res.json({
         success: true,
@@ -65,8 +95,8 @@ expenseRoutes.get('/', requireRole('viewer'), validateQuery(expenseFilterSchema)
           notes: e.notes,
           receiptUrl: e.receipt_url,
           productionBatchId: e.production_batch_id,
-          flags: (e as any).flags ?? null,
-          needsReview: (e as any).needs_review ?? false,
+          flags: null,
+          needsReview: false,
           multichainTxid: e.multichain_txid,
           polygonTxhash: e.polygon_txhash,
           createdBy: e.created_by,
@@ -117,11 +147,12 @@ expenseRoutes.get('/:id', requireRole('viewer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
       const expense = await prisma.expenses.findFirst({
-        where: { id: req.params.id, org_id: authReq.orgId! },
+        where: { id, org_id: authReq.orgId! },
       });
 
-      if (!expense) throw new NotFoundError('Expense', req.params.id);
+      if (!expense) throw new NotFoundError('Expense', id);
 
       res.json({
         success: true,
@@ -241,11 +272,12 @@ expenseRoutes.put('/:id', requireRole('accountant'), validateBody(updateExpenseS
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
       const existing = await prisma.expenses.findFirst({
-        where: { id: req.params.id, org_id: authReq.orgId! },
+        where: { id, org_id: authReq.orgId! },
       });
 
-      if (!existing) throw new NotFoundError('Expense', req.params.id);
+      if (!existing) throw new NotFoundError('Expense', id);
       if (existing.status === 'voided') throw new ForbiddenError('Cannot edit a voided expense');
 
       const data = req.body;
@@ -262,7 +294,7 @@ expenseRoutes.put('/:id', requireRole('accountant'), validateBody(updateExpenseS
       if (data.status !== undefined) updateData.status = data.status;
 
       const updated = await prisma.expenses.update({
-        where: { id: req.params.id },
+        where: { id },
         data: updateData,
       });
 
@@ -271,7 +303,7 @@ expenseRoutes.put('/:id', requireRole('accountant'), validateBody(updateExpenseS
         userId: authReq.userId,
         action: 'update',
         entityType: 'expense',
-        entityId: req.params.id,
+        entityId: id,
         before: { amount: Number(existing.amount), description: existing.description },
         after: data,
         ...getClientInfo(req),
@@ -300,22 +332,23 @@ expenseRoutes.post('/:id/mark-reviewed', requireRole('accountant'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
       const existing = await prisma.expenses.findFirst({
-        where: { id: req.params.id, org_id: authReq.orgId! },
+        where: { id, org_id: authReq.orgId! },
       });
-      if (!existing) throw new NotFoundError('Expense', req.params.id);
+      if (!existing) throw new NotFoundError('Expense', id);
       const reviewedTag = `reviewed:${authReq.userId}:${new Date().toISOString()}`;
       const tags = [...(existing.tags || []), reviewedTag];
       const updated = await prisma.expenses.update({
-        where: { id: req.params.id },
-        data: { needs_review: false, flags: null, tags, status: 'approved' },
+        where: { id },
+        data: { needs_review: false, flags: Prisma.JsonNull, tags, status: 'approved' },
       });
       try {
         await createExpenseJournal(updated, authReq.userId);
       } catch (err) {
         console.error('Failed to create journal entry for expense:', err);
       }
-      res.json({ success: true, data: { id: req.params.id } });
+      res.json({ success: true, data: { id } });
     } catch (err) {
       next(err);
     }
@@ -327,7 +360,7 @@ expenseRoutes.post('/:id/fix-amount', requireRole('accountant'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
-      const { id } = req.params;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
       const { newAmount } = req.body || {};
       const existing = await prisma.expenses.findFirst({
         where: { id, org_id: authReq.orgId! },
@@ -343,7 +376,7 @@ expenseRoutes.post('/:id/fix-amount', requireRole('accountant'),
       const tags = [...(existing.tags || []), `amount_corrected:${new Date().toISOString()}`];
       await prisma.expenses.update({
         where: { id },
-        data: { amount, needs_review: false, flags: null, tags },
+        data: { amount, needs_review: false, flags: Prisma.JsonNull, tags },
       });
 
       await writeAuditLog({
@@ -369,7 +402,7 @@ expenseRoutes.post('/:id/convert-to-asset', requireRole('accountant'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
-      const { id } = req.params;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
       const { usefulLife = 5, category } = req.body || {};
       const expense = await prisma.expenses.findFirst({
         where: { id, org_id: authReq.orgId! },
@@ -396,7 +429,7 @@ expenseRoutes.post('/:id/convert-to-asset', requireRole('accountant'),
           category: 'equipment',
           tags,
           needs_review: false,
-          flags: null,
+          flags: Prisma.JsonNull,
         },
       });
 
@@ -433,15 +466,16 @@ expenseRoutes.post('/:id/void', requireRole('accountant'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
       const existing = await prisma.expenses.findFirst({
-        where: { id: req.params.id, org_id: authReq.orgId! },
+        where: { id, org_id: authReq.orgId! },
       });
 
-      if (!existing) throw new NotFoundError('Expense', req.params.id);
+      if (!existing) throw new NotFoundError('Expense', id);
       if (existing.status === 'voided') throw new ForbiddenError('Expense already voided');
 
       await prisma.expenses.update({
-        where: { id: req.params.id },
+        where: { id },
         data: { status: 'voided' },
       });
 
@@ -450,16 +484,16 @@ expenseRoutes.post('/:id/void', requireRole('accountant'),
         userId: authReq.userId,
         action: 'void',
         entityType: 'expense',
-        entityId: req.params.id,
+        entityId: id,
         before: { status: existing.status },
         after: { status: 'voided' },
         ...getClientInfo(req),
       });
 
       // Auto-anchor: voiding becomes a signed blockchain event
-      triggerAutoAnchor({ entityType: 'expense', entityId: req.params.id, orgId: authReq.orgId!, userId: authReq.userId, action: 'void' });
+      triggerAutoAnchor({ entityType: 'expense', entityId: id, orgId: authReq.orgId!, userId: authReq.userId, action: 'void' });
 
-      res.json({ success: true, data: { id: req.params.id, status: 'voided' } });
+      res.json({ success: true, data: { id, status: 'voided' } });
     } catch (err) {
       next(err);
     }

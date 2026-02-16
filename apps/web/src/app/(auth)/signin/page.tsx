@@ -70,7 +70,7 @@ export default function SignInPage() {
           <div className="border-t border-gray-100 pt-4">
             <p className="text-[11px] text-gray-300 text-center mb-2">Demo accounts</p>
             <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-              {['owner', 'admin', 'accountant', 'viewer'].map((r) => (
+              {['owner', 'admin', 'accountant', 'viewer', 'sujalgurung360'].map((r) => (
                 <button key={r} type="button"
                   onClick={() => { setEmail(`${r}@dxer.demo`); setPassword('password123'); }}
                   className="rounded-xl border border-gray-100 bg-surface-50 px-2.5 py-1.5 text-gray-400 hover:border-purple-200 hover:bg-purple-50 hover:text-purple-600 font-medium transition-all text-center">

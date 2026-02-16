@@ -61,15 +61,16 @@ batchRoutes.get('/:id', requireRole('viewer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
       const batch = await prisma.production_batches.findFirst({
-        where: { id: req.params.id, org_id: authReq.orgId! },
+        where: { id, org_id: authReq.orgId! },
         include: {
           events: { orderBy: { created_at: 'asc' } },
           expenses: { orderBy: { created_at: 'desc' } },
         },
       });
 
-      if (!batch) throw new NotFoundError('Production Batch', req.params.id);
+      if (!batch) throw new NotFoundError('Production Batch', id);
 
       res.json({
         success: true,
@@ -146,10 +147,11 @@ batchRoutes.put('/:id', requireRole('accountant'), validateBody(updateBatchSchem
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
       const existing = await prisma.production_batches.findFirst({
-        where: { id: req.params.id, org_id: authReq.orgId! },
+        where: { id, org_id: authReq.orgId! },
       });
-      if (!existing) throw new NotFoundError('Production Batch', req.params.id);
+      if (!existing) throw new NotFoundError('Production Batch', id);
 
       const data = req.body;
       const updateData: any = {};
@@ -166,7 +168,7 @@ batchRoutes.put('/:id', requireRole('accountant'), validateBody(updateBatchSchem
       }
 
       await prisma.production_batches.update({
-        where: { id: req.params.id },
+        where: { id },
         data: updateData,
       });
 
@@ -175,15 +177,15 @@ batchRoutes.put('/:id', requireRole('accountant'), validateBody(updateBatchSchem
         userId: authReq.userId,
         action: 'update',
         entityType: 'production_batch',
-        entityId: req.params.id,
+        entityId: id,
         before: { status: existing.status, name: existing.name },
         after: data,
         ...getClientInfo(req),
       });
 
-      triggerAutoAnchor({ entityType: 'production_batch', entityId: req.params.id, orgId: authReq.orgId!, userId: authReq.userId, action: 'update' });
+      triggerAutoAnchor({ entityType: 'production_batch', entityId: id, orgId: authReq.orgId!, userId: authReq.userId, action: 'update' });
 
-      res.json({ success: true, data: { id: req.params.id } });
+      res.json({ success: true, data: { id } });
     } catch (err) { next(err); }
   }
 );

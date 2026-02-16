@@ -64,7 +64,7 @@ async function rpcCall(method: string, params: unknown[] = [], timeoutMs: number
       throw new Error(`Multichain RPC HTTP ${response.status}: ${text}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as { error?: { message: string; code?: number }; result?: unknown };
 
     if (data.error) {
       logger.error({ error: data.error }, 'Multichain RPC error');

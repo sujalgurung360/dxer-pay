@@ -59,12 +59,13 @@ payrollRoutes.get('/:id', requireRole('viewer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
       const payroll = await prisma.payrolls.findFirst({
-        where: { id: req.params.id, org_id: authReq.orgId! },
+        where: { id, org_id: authReq.orgId! },
         include: { entries: { include: { employee: true } } },
       });
 
-      if (!payroll) throw new NotFoundError('Payroll', req.params.id);
+      if (!payroll) throw new NotFoundError('Payroll', id);
 
       res.json({
         success: true,
@@ -99,12 +100,13 @@ payrollRoutes.get('/:id/export', requireRole('viewer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
       const payroll = await prisma.payrolls.findFirst({
-        where: { id: req.params.id, org_id: authReq.orgId! },
+        where: { id, org_id: authReq.orgId! },
         include: { entries: { include: { employee: true } } },
       });
 
-      if (!payroll) throw new NotFoundError('Payroll', req.params.id);
+      if (!payroll) throw new NotFoundError('Payroll', id);
 
       const csv = [
         'Employee,Email,Position,Amount',
@@ -185,15 +187,16 @@ payrollRoutes.post('/:id/complete', requireRole('admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
       const payroll = await prisma.payrolls.findFirst({
-        where: { id: req.params.id, org_id: authReq.orgId! },
+        where: { id, org_id: authReq.orgId! },
       });
 
-      if (!payroll) throw new NotFoundError('Payroll', req.params.id);
+      if (!payroll) throw new NotFoundError('Payroll', id);
       if (payroll.status !== 'draft') throw new AppError(400, 'INVALID_STATUS', 'Payroll must be in draft status');
 
       const updated = await prisma.payrolls.update({
-        where: { id: req.params.id },
+        where: { id },
         data: { status: 'completed' },
       });
 
@@ -208,15 +211,15 @@ payrollRoutes.post('/:id/complete', requireRole('admin'),
         userId: authReq.userId,
         action: 'status_change',
         entityType: 'payroll',
-        entityId: req.params.id,
+        entityId: id,
         before: { status: 'draft' },
         after: { status: 'completed' },
         ...getClientInfo(req),
       });
 
-      triggerAutoAnchor({ entityType: 'payroll', entityId: req.params.id, orgId: authReq.orgId!, userId: authReq.userId, action: 'status_change' });
+      triggerAutoAnchor({ entityType: 'payroll', entityId: id, orgId: authReq.orgId!, userId: authReq.userId, action: 'status_change' });
 
-      res.json({ success: true, data: { id: req.params.id, status: 'completed' } });
+      res.json({ success: true, data: { id, status: 'completed' } });
     } catch (err) { next(err); }
   }
 );

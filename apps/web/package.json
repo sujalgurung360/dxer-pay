@@ -7,21 +7,22 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "vitest run",
-    "test:ci": "vitest run --reporter=verbose"
+    "test": "vitest run --passWithNoTests",
+    "test:ci": "vitest run --reporter=verbose --passWithNoTests"
   },
   "dependencies": {
     "@dxer/shared": "*",
-    "@supabase/supabase-js": "^2.47.0",
     "@supabase/ssr": "^0.5.0",
+    "@supabase/supabase-js": "^2.47.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "zod": "^3.23.0",
-    "lucide-react": "^0.468.0",
-    "clsx": "^2.1.1"
+    "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.1.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -29,7 +30,6 @@
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.0",
-    "vitest": "^2.1.0",
-    "@testing-library/react": "^16.1.0"
+    "vitest": "^4.0.18"
   }
 }

@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import type { AuditAction, AuditEntityType } from '@dxer/shared';
@@ -27,8 +28,8 @@ export async function writeAuditLog(params: AuditParams): Promise<void> {
         action: params.action,
         entity_type: params.entityType,
         entity_id: params.entityId,
-        before_data: params.before ?? undefined,
-        after_data: params.after ?? undefined,
+        before_data: (params.before ?? undefined) as Prisma.InputJsonValue | undefined,
+        after_data: (params.after ?? undefined) as Prisma.InputJsonValue | undefined,
         ip_address: params.ipAddress ?? null,
         user_agent: params.userAgent ?? null,
       },

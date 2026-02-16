@@ -56,7 +56,7 @@ export default function DashboardPage() {
       fromDate.setDate(fromDate.getDate() - 30);
       const from = fromDate.toISOString().slice(0, 10);
 
-      const [pnlRes, burnRes, auditRes, unpaidInvRes, flaggedRes] = await Promise.all([
+      const results = await Promise.allSettled([
         api.accountancy.profitAndLoss({ from, to, basis: 'accrual' }),
         api.accountancy.burnRate({ from, to }),
         api.audit.list({ pageSize: '25' }),
@@ -64,11 +64,12 @@ export default function DashboardPage() {
         api.expenses.list({ filter: 'needs_review', pageSize: '5' }),
       ]);
 
-      setPnl(pnlRes.data);
-      setBurnRate(burnRes.data);
-      setLedger(auditRes.data || []);
-      setUnpaidInvoicesCount(unpaidInvRes.pagination?.total ?? null);
-      setFlaggedExpenses(flaggedRes.data || []);
+      const [pnlRes, burnRes, auditRes, unpaidInvRes, flaggedRes] = results;
+      if (pnlRes.status === 'fulfilled') setPnl(pnlRes.value.data);
+      if (burnRes.status === 'fulfilled') setBurnRate(burnRes.value.data);
+      if (auditRes.status === 'fulfilled') setLedger(auditRes.value.data || []);
+      if (unpaidInvRes.status === 'fulfilled') setUnpaidInvoicesCount(unpaidInvRes.value.pagination?.total ?? null);
+      if (flaggedRes.status === 'fulfilled') setFlaggedExpenses(flaggedRes.value.data || []); else setFlaggedExpenses([]);
 
       if (loadAnchoring) {
         Promise.all([

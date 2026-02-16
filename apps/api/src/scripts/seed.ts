@@ -23,6 +23,7 @@ async function main() {
     { email: 'admin@dxer.demo', password: 'password123', fullName: 'Bob Admin' },
     { email: 'accountant@dxer.demo', password: 'password123', fullName: 'Carol Accountant' },
     { email: 'viewer@dxer.demo', password: 'password123', fullName: 'Dave Viewer' },
+    { email: 'sujalgurung360@dxer.demo', password: 'password123', fullName: 'Sujal Gurung' },
   ];
 
   const createdUsers: { id: string; email: string }[] = [];
@@ -57,7 +58,7 @@ async function main() {
     return;
   }
 
-  const [ownerId, adminId, accountantId, viewerId] = createdUsers.map((u) => u.id);
+  const [ownerId, adminId, accountantId, viewerId, sujalId] = createdUsers.map((u) => u.id);
 
   // ─── Create Organization ───────────────────────
   console.log('\nCreating organization...');
@@ -79,6 +80,7 @@ async function main() {
     { user_id: adminId, role: 'admin' },
     { user_id: accountantId, role: 'accountant' },
     { user_id: viewerId, role: 'viewer' },
+    ...(sujalId ? [{ user_id: sujalId, role: 'admin' }] : []),
   ];
 
   for (const m of memberData) {

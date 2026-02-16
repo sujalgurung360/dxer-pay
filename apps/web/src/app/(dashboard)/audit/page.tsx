@@ -101,7 +101,7 @@ export default function ActivityLogPage() {
             v{row.version || 1}
           </span>
           {uiMode === 'advanced' && row.previousPolygonTx && (
-            <Link2 className="h-3 w-3 text-purple-400" title="Linked to previous version" />
+            <span title="Linked to previous version"><Link2 className="h-3 w-3 text-purple-400" aria-hidden /></span>
           )}
         </div>
       ),

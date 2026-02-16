@@ -4,7 +4,7 @@
  */
 
 import { prisma } from '../lib/prisma.js';
-import { supabaseAdmin } from '../lib/supabase.js';
+import { getSupabaseAdmin } from '../lib/supabase.js';
 import { createZip } from '../lib/zip-utils.js';
 import { computeProfitAndLossForOrg, computeTrialBalanceForOrg } from './accountancy.js';
 import {
@@ -61,7 +61,7 @@ export async function generateTaxPackage(
     const zipBuffer = await createZip(files);
     const fileName = `${orgId}/${year}/tax-package-${Date.now()}.zip`;
 
-    const { error } = await supabaseAdmin.storage
+    const { error } = await getSupabaseAdmin().storage
       .from('tax-packages')
       .upload(fileName, zipBuffer, { contentType: 'application/zip', upsert: true });
 
@@ -69,7 +69,7 @@ export async function generateTaxPackage(
 
     const {
       data: { publicUrl },
-    } = supabaseAdmin.storage.from('tax-packages').getPublicUrl(fileName);
+    } = getSupabaseAdmin().storage.from('tax-packages').getPublicUrl(fileName);
 
     await (prisma as any).tax_packages.update({
       where: { id: taxPackage.id },

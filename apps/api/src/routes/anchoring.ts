@@ -162,7 +162,8 @@ anchorRoutes.get('/verify/:txid',
   authenticate, resolveOrg, requireRole('viewer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const verification = await verifyAnchor(req.params.txid);
+      const txid = Array.isArray(req.params.txid) ? req.params.txid[0] : req.params.txid;
+      const verification = await verifyAnchor(txid ?? '');
       res.json({ success: true, data: verification });
     } catch (err) { next(err); }
   }
@@ -300,7 +301,8 @@ anchorRoutes.get('/recover/:entityType/:entityId',
   authenticate, resolveOrg, requireRole('viewer'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { entityType, entityId } = req.params;
+      const entityType = Array.isArray(req.params.entityType) ? req.params.entityType[0] : req.params.entityType;
+      const entityId = Array.isArray(req.params.entityId) ? req.params.entityId[0] : req.params.entityId;
       const { getStreamItemsByKey } = await import('../lib/multichain.js');
 
       const streamKey = `${entityType}:${entityId}`;
@@ -355,15 +357,16 @@ anchorRoutes.get('/dxexplorer/lookup/:identifier',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
-      const { identifier } = req.params;
+      const identifier = Array.isArray(req.params.identifier) ? req.params.identifier[0] : req.params.identifier;
+      const idStr = identifier ?? '';
 
       // Search by polygon tx hash in results
       let jobs = await prisma.dxer_anchor_jobs.findMany({
         where: {
           org_id: authReq.orgId!,
           OR: [
-            { entity_id: identifier },
-            { result: { path: ['polygonTxHash'], string_contains: identifier } },
+            { entity_id: idStr },
+            { result: { path: ['polygonTxHash'], string_contains: idStr } },
           ],
         },
         orderBy: { created_at: 'desc' },
@@ -379,9 +382,9 @@ anchorRoutes.get('/dxexplorer/lookup/:identifier',
             where: {
               org_id: authReq.orgId!,
               OR: [
-                { id: identifier },
-                { polygon_txhash: identifier },
-                { multichain_txid: identifier },
+                { id: idStr },
+                { polygon_txhash: idStr },
+                { multichain_txid: idStr },
               ],
             },
             take: 5,

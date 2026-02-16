@@ -98,10 +98,11 @@ employeeRoutes.put('/:id', requireRole('admin'), validateBody(updateEmployeeSche
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const authReq = req as AuthenticatedRequest;
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
       const existing = await prisma.employees.findFirst({
-        where: { id: req.params.id, org_id: authReq.orgId! },
+        where: { id, org_id: authReq.orgId! },
       });
-      if (!existing) throw new NotFoundError('Employee', req.params.id);
+      if (!existing) throw new NotFoundError('Employee', id);
 
       const data = req.body;
       const updateData: any = {};
@@ -113,22 +114,22 @@ employeeRoutes.put('/:id', requireRole('admin'), validateBody(updateEmployeeSche
       if (data.currency !== undefined) updateData.currency = data.currency;
       if (data.startDate !== undefined) updateData.start_date = new Date(data.startDate);
 
-      await prisma.employees.update({ where: { id: req.params.id }, data: updateData });
+      await prisma.employees.update({ where: { id }, data: updateData });
 
       await writeAuditLog({
         orgId: authReq.orgId!,
         userId: authReq.userId,
         action: 'update',
         entityType: 'employee',
-        entityId: req.params.id,
+        entityId: id,
         before: { fullName: existing.full_name, salary: Number(existing.salary) },
         after: data,
         ...getClientInfo(req),
       });
 
-      triggerAutoAnchor({ entityType: 'employee', entityId: req.params.id, orgId: authReq.orgId!, userId: authReq.userId, action: 'update' });
+      triggerAutoAnchor({ entityType: 'employee', entityId: id, orgId: authReq.orgId!, userId: authReq.userId, action: 'update' });
 
-      res.json({ success: true, data: { id: req.params.id } });
+      res.json({ success: true, data: { id } });
     } catch (err) { next(err); }
   }
 );
