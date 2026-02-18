@@ -1,5 +1,12 @@
 {
   "buildCommand": "cd ../.. && npx turbo run build --filter=@dxer/api",
   "installCommand": "cd ../.. && npm install",
-  "rewrites": [{ "source": "/(.*)", "destination": "/api" }]
+  "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
+  "functions": {
+    "api/index.js": {
+      "runtime": "nodejs20.x",
+      "memory": 1024,
+      "maxDuration": 30
+    }
+  }
 }
