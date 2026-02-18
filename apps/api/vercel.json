@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd ../.. && npx turbo run build --filter=@dxer/api",
+  "buildCommand": "cd ../.. && npx turbo run build --filter=@dxer/api && mkdir -p apps/api/node_modules && cp -rL node_modules/@prisma apps/api/node_modules/ && cp -rL node_modules/.prisma apps/api/node_modules/",
   "installCommand": "cd ../.. && npm install",
   "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
   "functions": {
